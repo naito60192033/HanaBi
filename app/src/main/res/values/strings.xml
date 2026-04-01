@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">HanaBi</string>
+    <string name="smb_server">NASサーバー</string>
+    <string name="loading">読み込み中...</string>
+    <string name="error_connection">接続エラー: NASに接続できませんでした</string>
+    <string name="no_videos">動画が見つかりません</string>
+    <string name="settings">設定</string>
+    <string name="smb_host">ホスト名 / IPアドレス</string>
+    <string name="smb_share">共有フォルダ名</string>
+    <string name="smb_username">ユーザー名</string>
+    <string name="smb_password">パスワード</string>
+    <string name="save">保存</string>
+    <string name="resume_playback">続きから再生</string>
+    <string name="play_from_beginning">最初から再生</string>
+</resources>

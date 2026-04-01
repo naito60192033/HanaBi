@@ -1,0 +1,22 @@
+# Android / Gradle
+*.iml
+.gradle/
+local.properties
+.idea/
+.DS_Store
+/build/
+app/build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Kotlin
+*.class
+*.jar
+*.war
+
+# Sensitive
+local.properties
+
+# Gradle wrapper JAR（バイナリはコミット対象にする場合もあるが今回は除外）
+# gradle/wrapper/gradle-wrapper.jar
