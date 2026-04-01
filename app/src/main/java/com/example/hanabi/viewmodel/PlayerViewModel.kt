@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import com.example.hanabi.data.db.PlaybackDao
@@ -38,7 +39,18 @@ class PlayerViewModel @Inject constructor(
     private val _savedProgress = MutableStateFlow<PlaybackProgress?>(null)
     val savedProgress: StateFlow<PlaybackProgress?> = _savedProgress
 
+    private val _isBuffering = MutableStateFlow(false)
+    val isBuffering: StateFlow<Boolean> = _isBuffering
+
     private var currentSmbPath: String = ""
+
+    init {
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                _isBuffering.value = playbackState == Player.STATE_BUFFERING
+            }
+        })
+    }
 
     /** メディアをセットして準備する（再生はまだ開始しない） */
     fun prepare(smbPath: String) {
