@@ -195,7 +195,7 @@ private fun EntryCard(
                         .background(Color.Black.copy(alpha = 0.55f))
                 ) {
                     Text(
-                        text = entry.name,
+                        text = displayName(entry.name),
                         color = Color.White,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
@@ -218,7 +218,7 @@ private fun EntryCard(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = entry.name,
+                        text = displayName(entry.name),
                         color = Color.White,
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 2,
@@ -234,5 +234,19 @@ private fun EntryCard(
 private fun buildHeaderTitle(path: String): String {
     if (path.isBlank()) return "HanaBi"
     val parts = path.split("/").filter { it.isNotBlank() }
-    return parts.lastOrNull() ?: "HanaBi"
+    val last = parts.lastOrNull() ?: return "HanaBi"
+    // 末尾セグメントが S01 等の形式なら「親フォルダ名-Sxx」にする
+    if (last.matches(Regex("S\\d+"))) {
+        val parent = parts.getOrNull(parts.size - 2)
+        if (parent != null) return "$parent-$last"
+    }
+    return last
+}
+
+/** ファイル名の表示用テキストを返す
+ *  `タイトル_SxxExx_エピソード名.mp4` 形式の場合はエピソード名のみ抽出 */
+private val episodeRegex = Regex("""^.+_S\d+E\d+_(.+)\.[^.]+$""")
+
+private fun displayName(name: String): String {
+    return episodeRegex.find(name)?.groupValues?.get(1) ?: name
 }
