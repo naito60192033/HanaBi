@@ -2,7 +2,6 @@ package com.example.hanabi.data.smb
 
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
-import android.net.Uri
 import coil.ImageLoader
 import coil.decode.DataSource
 import coil.decode.ImageSource
@@ -17,18 +16,25 @@ import okio.Buffer
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 
-/** Coil用カスタムFetcher: smb://URIの動画からフレーム抽出、または画像を直接読み込む */
+/**
+ * ファイル名に `#` 等の URI 特殊文字が含まれる場合でも正しく扱えるよう、
+ * Uri.parse() を通さず生パスを直接保持するラッパー
+ */
+data class SmbThumbnailKey(val path: String)
+
+/** Coil用カスタムFetcher: smb://パスの動画からフレーム抽出、または画像を直接読み込む */
 class SmbImageFetcher(
-    private val data: Uri,
+    private val rawPath: String,
     private val config: SmbConfig,
     private val options: Options
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult = withContext(Dispatchers.IO) {
         val cifsContext = config.buildCifsContext()
-        val smbFile = SmbFile(data.toString(), cifsContext)
+        // rawPath を URI 解析せず直接 SmbFile に渡す（# 等の特殊文字が壊れない）
+        val smbFile = SmbFile(rawPath, cifsContext)
 
-        val bytes = if (isVideoPath(data.path)) {
+        val bytes = if (isVideoPath(rawPath)) {
             extractVideoFrame(smbFile)
         } else {
             smbFile.openInputStream().use { it.readBytes() }
@@ -49,7 +55,9 @@ class SmbImageFetcher(
         val retriever = MediaMetadataRetriever()
         try {
             retriever.setDataSource(mediaSource)
-            val bitmap = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLong() ?: 0L
+            val positionUs = durationMs * 1000L * 5 / 100
+            val bitmap = retriever.getFrameAtTime(positionUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                 ?: error("フレーム抽出失敗: ${smbFile.name}")
             return ByteArrayOutputStream().use { out ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
@@ -61,9 +69,9 @@ class SmbImageFetcher(
         }
     }
 
-    class Factory @Inject constructor(private val config: SmbConfig) : Fetcher.Factory<Uri> {
-        override fun create(data: Uri, options: Options, imageLoader: ImageLoader): Fetcher? =
-            if (data.scheme == "smb") SmbImageFetcher(data, config, options) else null
+    class Factory @Inject constructor(private val config: SmbConfig) : Fetcher.Factory<SmbThumbnailKey> {
+        override fun create(data: SmbThumbnailKey, options: Options, imageLoader: ImageLoader): Fetcher =
+            SmbImageFetcher(data.path, config, options)
     }
 
     companion object {

@@ -29,6 +29,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.tv.material3.*
 import coil.compose.AsyncImage
 import com.example.hanabi.data.smb.SmbEntry
+import com.example.hanabi.data.smb.SmbThumbnailKey
 import com.example.hanabi.viewmodel.BrowserUiState
 import com.example.hanabi.viewmodel.BrowserViewModel
 
@@ -182,7 +183,7 @@ private fun EntryCard(
             if (!entry.isDirectory && entry.thumbnailPath != null) {
                 // 動画: サムネイル画像 + 下部に名前オーバーレイ
                 AsyncImage(
-                    model = entry.thumbnailPath,
+                    model = entry.thumbnailPath?.let { SmbThumbnailKey(it) },
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
