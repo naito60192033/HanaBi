@@ -6,7 +6,8 @@ data class SmbEntry(
     val path: String,        // smb://host/share/path 形式
     val isDirectory: Boolean,
     val size: Long = 0L,
-    val lastModified: Long = 0L
+    val lastModified: Long = 0L,
+    val thumbnailPath: String? = null  // Synology @eaDir サムネイルパス
 ) {
     /** 動画ファイルかどうか（拡張子で判定） */
     val isVideo: Boolean

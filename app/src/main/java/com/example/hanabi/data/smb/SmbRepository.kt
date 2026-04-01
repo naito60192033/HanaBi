@@ -23,12 +23,15 @@ class SmbRepository @Inject constructor(
 
             smbFile.listFiles()
                 ?.map { file ->
+                    val fileName = file.name.trimEnd('/')
+                    val filePath = file.canonicalPath
                     SmbEntry(
-                        name = file.name.trimEnd('/'),
-                        path = file.canonicalPath,
+                        name = fileName,
+                        path = filePath,
                         isDirectory = file.isDirectory,
                         size = if (file.isDirectory) 0L else file.length(),
-                        lastModified = file.lastModified()
+                        lastModified = file.lastModified(),
+                        thumbnailPath = if (!file.isDirectory) filePath else null
                     )
                 }
                 ?.filter { entry ->

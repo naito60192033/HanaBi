@@ -20,11 +20,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.tv.material3.*
+import coil.compose.AsyncImage
 import com.example.hanabi.data.smb.SmbEntry
 import com.example.hanabi.viewmodel.BrowserUiState
 import com.example.hanabi.viewmodel.BrowserViewModel
@@ -176,25 +179,52 @@ private fun EntryCard(
                 .background(if (entry.isDirectory) Color(0xFF1A237E) else Color(0xFF1B5E20)),
             contentAlignment = Alignment.Center
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier.padding(12.dp)
-            ) {
-                Icon(
-                    imageVector = if (entry.isDirectory) Icons.Default.Folder else Icons.Default.PlayArrow,
+            if (!entry.isDirectory && entry.thumbnailPath != null) {
+                // 動画: サムネイル画像 + 下部に名前オーバーレイ
+                AsyncImage(
+                    model = entry.thumbnailPath,
                     contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(48.dp)
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                    error = rememberVectorPainter(Icons.Default.PlayArrow)
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = entry.name,
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomStart)
+                        .background(Color.Black.copy(alpha = 0.55f))
+                ) {
+                    Text(
+                        text = entry.name,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            } else {
+                // フォルダ or サムネイルなし: アイコン表示
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(12.dp)
+                ) {
+                    Icon(
+                        imageVector = if (entry.isDirectory) Icons.Default.Folder else Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = entry.name,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
