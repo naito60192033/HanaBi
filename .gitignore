@@ -19,9 +19,10 @@ captures/
 # Sensitive
 local.properties
 
-# Claude Code（ローカル設定・メモリは環境依存のため除外）
-.claude/memory/
-.claude/settings.local.json
+# Claude Code（ローカル設定・タスク管理は環境依存のため除外）
+.claude/
+CLAUDE.md
+tasks/
 
 # Gradle wrapper JAR（バイナリはコミット対象にする場合もあるが今回は除外）
 # gradle/wrapper/gradle-wrapper.jar
