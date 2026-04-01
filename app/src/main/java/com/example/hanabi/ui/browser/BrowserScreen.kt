@@ -48,8 +48,8 @@ fun BrowserScreen(
     // コンテンツ読み込み後に最終選択位置へスクロール＆フォーカス復元
     LaunchedEffect(uiState) {
         val idx = viewModel.lastSelectedIndex
-        if (uiState is BrowserUiState.Success && idx > 0) {
-            gridState.scrollToItem(idx)
+        if (uiState is BrowserUiState.Success) {
+            if (idx > 0) gridState.scrollToItem(idx)
             // グリッドアイテムの描画完了を待ってフォーカス要求
             kotlinx.coroutines.delay(50)
             try { focusRequester.requestFocus() } catch (_: Exception) {}

@@ -71,6 +71,7 @@ fun PlayerScreen(
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val savedProgress by viewModel.savedProgress.collectAsState()
+    val isBuffering by viewModel.isBuffering.collectAsState()
     var isReady by remember { mutableStateOf(false) }
     val seekEvent = remember { mutableStateOf<SeekEvent?>(null) }
     val accumulator = remember { SeekAccumulator() }
@@ -117,10 +118,15 @@ fun PlayerScreen(
                     KeyEvent.KEYCODE_DPAD_CENTER,
                     KeyEvent.KEYCODE_ENTER,
                     KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                        viewModel.togglePlayPause()
-                        // 一時停止・再生時は中央ボタンを戻してコントローラーを表示
+                        val isNowPlaying = viewModel.togglePlayPause()
                         playPauseBtnRef.value?.visibility = View.VISIBLE
-                        playerViewRef.value?.showController()
+                        if (isNowPlaying) {
+                            // 再生再開時はコントローラーをすぐ非表示にして映像を見せる
+                            playerViewRef.value?.hideController()
+                        } else {
+                            // 一時停止時はコントローラーを表示
+                            playerViewRef.value?.showController()
+                        }
                         true
                     }
                     else -> false
@@ -196,6 +202,11 @@ fun PlayerScreen(
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        // バッファリング中のスピナーオーバーレイ
+        if (isBuffering) {
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+        }
 
         // シークインジケーターオーバーレイ（左右に累積秒数を表示）
         val currentSeekEvent = seekEvent.value
