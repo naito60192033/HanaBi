@@ -34,6 +34,14 @@ class BrowserViewModel @Inject constructor(
     val currentPath: String get() = pathStack.lastOrNull() ?: ""
     val canGoBack: Boolean get() = pathStack.isNotEmpty()
 
+    /** プレイヤーから戻ったときにカーソルを復元するための最終選択インデックス */
+    var lastSelectedIndex: Int = 0
+        private set
+
+    fun setLastSelectedIndex(index: Int) {
+        lastSelectedIndex = index
+    }
+
     init {
         loadCurrentPath()
     }

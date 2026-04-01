@@ -1,6 +1,7 @@
 package com.example.hanabi
 
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -19,6 +20,7 @@ import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -26,6 +28,21 @@ class MainActivity : ComponentActivity() {
                 HanaBiNavHost()
             }
         }
+    }
+
+    /**
+     * Activity最上位でキーイベントを捕捉する。
+     * PlayerScreenが登録したハンドラーを優先処理することで、
+     * ExoPlayer内部やMediaSessionに横取りされる前に中央ボタン等を処理できる。
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (playerKeyHandler?.invoke(event) == true) return true
+        return super.dispatchKeyEvent(event)
+    }
+
+    companion object {
+        /** PlayerScreen がアクティブな間だけ登録されるキーハンドラー */
+        var playerKeyHandler: ((KeyEvent) -> Boolean)? = null
     }
 }
 

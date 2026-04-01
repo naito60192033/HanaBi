@@ -8,7 +8,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.PlayArrow
@@ -35,6 +38,19 @@ fun BrowserScreen(
     viewModel: BrowserViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val gridState = rememberLazyGridState()
+    val focusRequester = remember { FocusRequester() }
+
+    // コンテンツ読み込み後に最終選択位置へスクロール＆フォーカス復元
+    LaunchedEffect(uiState) {
+        val idx = viewModel.lastSelectedIndex
+        if (uiState is BrowserUiState.Success && idx > 0) {
+            gridState.scrollToItem(idx)
+            // グリッドアイテムの描画完了を待ってフォーカス要求
+            kotlinx.coroutines.delay(50)
+            try { focusRequester.requestFocus() } catch (_: Exception) {}
+        }
+    }
 
     // 設定画面から戻ったときに再読み込みする
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -112,15 +128,20 @@ fun BrowserScreen(
             is BrowserUiState.Success -> {
                 // ファイル/フォルダのグリッド表示
                 LazyVerticalGrid(
+                    state = gridState,
                     columns = GridCells.Adaptive(minSize = 200.dp),
                     contentPadding = PaddingValues(4.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    items(state.entries, key = { it.path }) { entry ->
+                    itemsIndexed(state.entries, key = { _, e -> e.path }) { index, entry ->
                         EntryCard(
                             entry = entry,
+                            modifier = if (index == viewModel.lastSelectedIndex)
+                                Modifier.focusRequester(focusRequester)
+                            else Modifier,
                             onClick = {
+                                viewModel.setLastSelectedIndex(index)
                                 if (entry.isDirectory) {
                                     viewModel.openDirectory(entry)
                                 } else if (entry.isVideo) {
@@ -140,11 +161,12 @@ fun BrowserScreen(
 @Composable
 private fun EntryCard(
     entry: SmbEntry,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Card(
         onClick = onClick,
-        modifier = Modifier
+        modifier = modifier
             .width(200.dp)
             .height(140.dp)
     ) {

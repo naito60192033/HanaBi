@@ -56,6 +56,30 @@ class PlayerViewModel @Inject constructor(
         startProgressSaving()
     }
 
+    /** 30秒早送り */
+    fun seekForward(ms: Long = 30_000L) {
+        val duration = player.duration.takeIf { it > 0 } ?: return
+        val newPos = (player.currentPosition + ms).coerceAtMost(duration)
+        player.seekTo(newPos)
+    }
+
+    /** 10秒巻き戻し */
+    fun seekBackward(ms: Long = 10_000L) {
+        val newPos = (player.currentPosition - ms).coerceAtLeast(0L)
+        player.seekTo(newPos)
+    }
+
+    /** 再生/一時停止トグル。現在の再生状態を返す（true=再生開始、false=一時停止） */
+    fun togglePlayPause(): Boolean {
+        return if (player.isPlaying) {
+            player.pause()
+            false
+        } else {
+            player.play()
+            true
+        }
+    }
+
     /** 保存位置から続きを再生 */
     fun resumePlayback() {
         val position = _savedProgress.value?.positionMs ?: 0L
