@@ -1,3 +1,5 @@
+@file:OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package com.example.hanabi.ui.player
 
 import android.view.KeyEvent
@@ -20,6 +22,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.ui.PlayerView
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.media3.common.util.UnstableApi
 import androidx.tv.material3.*
 import com.example.hanabi.MainActivity
 import com.example.hanabi.data.db.PlaybackProgress
@@ -59,6 +62,7 @@ private class SeekAccumulator {
 }
 
 /** 動画プレイヤー画面 */
+@androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun PlayerScreen(

@@ -1,6 +1,10 @@
 # jcifs-ng SMBクライアント
 -keep class jcifs.** { *; }
 
+# BouncyCastle（NTLM認証のMD4に必要）
+-keep class org.bouncycastle.** { *; }
+-dontwarn org.bouncycastle.**
+
 # jcifs-ng が参照する未使用クラスのwarning抑制
 -dontwarn javax.security.auth.callback.NameCallback
 -dontwarn javax.security.auth.kerberos.KerberosKey
