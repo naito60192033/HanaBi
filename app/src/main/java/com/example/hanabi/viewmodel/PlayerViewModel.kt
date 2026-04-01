@@ -4,10 +4,12 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import com.example.hanabi.data.db.PlaybackDao
 import com.example.hanabi.data.db.PlaybackProgress
+import com.example.hanabi.data.smb.SmbConfig
+import com.example.hanabi.data.smb.SmbDataSource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
@@ -20,34 +22,29 @@ import javax.inject.Inject
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val playbackDao: PlaybackDao
+    private val playbackDao: PlaybackDao,
+    private val smbConfig: SmbConfig
 ) : ViewModel() {
 
-    lateinit var player: ExoPlayer
-        private set
+    // ViewModel生成時に初期化（AndroidViewのfactoryより必ず先に存在する）
+    val player: ExoPlayer = ExoPlayer.Builder(context)
+        .setMediaSourceFactory(
+            ProgressiveMediaSource.Factory(SmbDataSource.Factory(smbConfig))
+        )
+        .build()
 
     private val _savedProgress = MutableStateFlow<PlaybackProgress?>(null)
     val savedProgress: StateFlow<PlaybackProgress?> = _savedProgress
 
     private var currentSmbPath: String = ""
 
-    /** 動画を準備する（再生はまだ開始しない） */
+    /** メディアをセットして準備する（再生はまだ開始しない） */
     fun prepare(smbPath: String) {
         currentSmbPath = smbPath
-
-        // ExoPlayerを初期化
-        player = ExoPlayer.Builder(context).build().apply {
-            playWhenReady = false
-        }
-
         viewModelScope.launch {
-            // 保存済みの再生位置を確認
             val progress = playbackDao.getProgress(smbPath)
             _savedProgress.value = progress
-
-            // SMB URLをメディアアイテムとしてセット
-            val mediaItem = MediaItem.fromUri(smbPath)
-            player.setMediaItem(mediaItem)
+            player.setMediaItem(MediaItem.fromUri(smbPath))
             player.prepare()
         }
     }

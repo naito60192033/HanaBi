@@ -32,7 +32,7 @@ class BrowserViewModel @Inject constructor(
     private val pathStack = ArrayDeque<String>()
 
     val currentPath: String get() = pathStack.lastOrNull() ?: ""
-    val canGoBack: Boolean get() = pathStack.size > 1
+    val canGoBack: Boolean get() = pathStack.isNotEmpty()
 
     init {
         loadCurrentPath()
@@ -48,7 +48,9 @@ class BrowserViewModel @Inject constructor(
             _uiState.value = BrowserUiState.Loading
             repository.listEntries(currentPath)
                 .onSuccess { entries ->
-                    _uiState.value = BrowserUiState.Success(entries)
+                    // フォルダと動画ファイルのみ表示
+                    val filtered = entries.filter { it.isDirectory || it.isVideo }
+                    _uiState.value = BrowserUiState.Success(filtered)
                 }
                 .onFailure { e ->
                     _uiState.value = BrowserUiState.Error(e.message ?: "不明なエラー")
@@ -67,7 +69,7 @@ class BrowserViewModel @Inject constructor(
 
     /** 1つ上の階層に戻る */
     fun goBack(): Boolean {
-        if (pathStack.size <= 1) return false
+        if (pathStack.isEmpty()) return false
         pathStack.removeLast()
         loadCurrentPath()
         return true

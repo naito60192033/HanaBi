@@ -1,12 +1,13 @@
 [versions]
-agp = "8.5.2"
+agp = "8.6.0"
 kotlin = "2.0.21"
 ksp = "2.0.21-1.0.27"
 hilt = "2.51.1"
 composeBom = "2024.10.01"
-composeTv = "1.0.0"
+composeTvFoundation = "1.0.0-beta01"
+composeTvMaterial = "1.0.1"
 media3 = "1.4.1"
-jcifs = "2.1.36"
+jcifs = "2.1.10"
 coil = "2.7.0"
 room = "2.6.1"
 navigation = "2.8.3"
@@ -19,10 +20,11 @@ compose-ui = { group = "androidx.compose.ui", name = "ui" }
 compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 
 # TV向けCompose
-compose-tv-foundation = { group = "androidx.tv", name = "tv-foundation", version.ref = "composeTv" }
-compose-tv-material = { group = "androidx.tv", name = "tv-material", version.ref = "composeTv" }
+compose-tv-foundation = { group = "androidx.tv", name = "tv-foundation", version.ref = "composeTvFoundation" }
+compose-tv-material = { group = "androidx.tv", name = "tv-material", version.ref = "composeTvMaterial" }
 
 # Activity / Lifecycle
 activity-compose = { group = "androidx.activity", name = "activity-compose", version = "1.9.3" }

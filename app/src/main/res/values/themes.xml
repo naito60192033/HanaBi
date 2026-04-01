@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Fire TV向けテーマ（Leanbackベース） -->
-    <style name="Theme.HanaBi" parent="@style/Theme.Leanback">
+    <style name="Theme.HanaBi" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@android:color/black</item>
     </style>
 </resources>

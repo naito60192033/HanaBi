@@ -1,6 +1,9 @@
 package com.example.hanabi.ui.browser
 
 import androidx.activity.compose.BackHandler
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -17,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.tv.material3.*
 import com.example.hanabi.data.smb.SmbEntry
 import com.example.hanabi.viewmodel.BrowserUiState
@@ -31,6 +35,18 @@ fun BrowserScreen(
     viewModel: BrowserViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    // 設定画面から戻ったときに再読み込みする
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.loadCurrentPath()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // Androidのバックキーでフォルダ階層を上に戻る
     BackHandler(enabled = viewModel.canGoBack) {

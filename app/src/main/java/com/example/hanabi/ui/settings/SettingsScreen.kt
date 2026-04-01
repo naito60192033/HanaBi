@@ -2,13 +2,18 @@ package com.example.hanabi.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.*
@@ -32,7 +37,10 @@ fun SettingsScreen(
             .background(Color.Black)
             .padding(horizontal = 96.dp, vertical = 48.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        Column(
+            modifier = Modifier.verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
             Text(
                 "NAS接続設定",
                 style = MaterialTheme.typography.headlineMedium,
@@ -100,7 +108,22 @@ private fun SettingsTextField(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-        // TODO: TV向けのテキスト入力は標準的なTextField＋フォーカス管理が必要
-        // 現在はプレースホルダー実装 - 実装時にTVフレンドリーなInputを追加する
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            placeholder = { Text(placeholder, color = Color.DarkGray) },
+            visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = if (isPassword) KeyboardType.Password else KeyboardType.Text
+            ),
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = Color.White,
+                unfocusedBorderColor = Color.Gray,
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
