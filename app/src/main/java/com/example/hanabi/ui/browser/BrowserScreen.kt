@@ -28,7 +28,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.tv.material3.*
 import coil.compose.AsyncImage
+import android.view.KeyEvent
+import com.example.hanabi.MainActivity
 import com.example.hanabi.data.smb.SmbEntry
+import com.example.hanabi.data.smb.SmbThumbnailKey
 import com.example.hanabi.viewmodel.BrowserUiState
 import com.example.hanabi.viewmodel.BrowserViewModel
 
@@ -47,8 +50,8 @@ fun BrowserScreen(
     // コンテンツ読み込み後に最終選択位置へスクロール＆フォーカス復元
     LaunchedEffect(uiState) {
         val idx = viewModel.lastSelectedIndex
-        if (uiState is BrowserUiState.Success && idx > 0) {
-            gridState.scrollToItem(idx)
+        if (uiState is BrowserUiState.Success) {
+            if (idx > 0) gridState.scrollToItem(idx)
             // グリッドアイテムの描画完了を待ってフォーカス要求
             kotlinx.coroutines.delay(50)
             try { focusRequester.requestFocus() } catch (_: Exception) {}
@@ -65,6 +68,17 @@ fun BrowserScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // メニューボタンで設定画面へ遷移
+    DisposableEffect(Unit) {
+        MainActivity.menuKeyHandler = { event ->
+            if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_MENU) {
+                onNavigateToSettings()
+                true
+            } else false
+        }
+        onDispose { MainActivity.menuKeyHandler = null }
     }
 
     // Androidのバックキーでフォルダ階層を上に戻る
@@ -133,7 +147,7 @@ fun BrowserScreen(
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Adaptive(minSize = 200.dp),
-                    contentPadding = PaddingValues(4.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
@@ -182,7 +196,7 @@ private fun EntryCard(
             if (!entry.isDirectory && entry.thumbnailPath != null) {
                 // 動画: サムネイル画像 + 下部に名前オーバーレイ
                 AsyncImage(
-                    model = entry.thumbnailPath,
+                    model = entry.thumbnailPath?.let { SmbThumbnailKey(it) },
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),

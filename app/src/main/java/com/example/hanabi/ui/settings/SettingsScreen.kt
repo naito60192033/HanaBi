@@ -1,6 +1,7 @@
 package com.example.hanabi.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -10,7 +11,13 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -106,24 +113,61 @@ private fun SettingsTextField(
     placeholder: String = "",
     isPassword: Boolean = false
 ) {
+    var isEditing by remember { mutableStateOf(false) }
+    val textFieldFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    // 編集モードに入ったらTextFieldにフォーカスを移してキーボードを開く
+    LaunchedEffect(isEditing) {
+        if (isEditing) {
+            textFieldFocusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            placeholder = { Text(placeholder, color = Color.DarkGray) },
-            visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = if (isPassword) KeyboardType.Password else KeyboardType.Text
-            ),
-            singleLine = true,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White,
-                focusedBorderColor = Color.White,
-                unfocusedBorderColor = Color.Gray,
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
+
+        // 非編集時はBoxがD-padフォーカスを受け取り、決定ボタンで入力モードへ移行する
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusable(!isEditing)
+                .onKeyEvent { event ->
+                    if (!isEditing &&
+                        event.key == Key.DirectionCenter &&
+                        event.type == KeyEventType.KeyDown
+                    ) {
+                        isEditing = true
+                        true
+                    } else false
+                }
+        ) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                placeholder = { Text(placeholder, color = Color.DarkGray) },
+                visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (isPassword) KeyboardType.Password else KeyboardType.Text
+                ),
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = Color.White,
+                    unfocusedBorderColor = Color.Gray,
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(textFieldFocusRequester)
+                    // 非編集時はD-padナビゲーションによるフォーカスを受け取らない
+                    .focusProperties { canFocus = isEditing }
+                    .onFocusChanged { state ->
+                        // TextFieldからフォーカスが外れたら編集モードを終了
+                        if (isEditing && !state.hasFocus) isEditing = false
+                    }
+            )
+        }
     }
 }

@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
+    <!-- 動画再生中のスリープ防止 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <!-- Fire TV / Android TV として動作させる -->
     <uses-feature android:name="android.software.leanback" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />

@@ -31,15 +31,26 @@ class BrowserViewModel @Inject constructor(
     // 階層ナビゲーション用のパス履歴スタック
     private val pathStack = ArrayDeque<String>()
 
+    // 階層ごとの選択インデックス履歴（goBack時に復元する）
+    private val selectedIndexStack = ArrayDeque<Int>()
+
     val currentPath: String get() = pathStack.lastOrNull() ?: ""
     val canGoBack: Boolean get() = pathStack.isNotEmpty()
 
-    /** プレイヤーから戻ったときにカーソルを復元するための最終選択インデックス */
+    /** カーソルを復元するための最終選択インデックス */
     var lastSelectedIndex: Int = 0
         private set
 
     fun setLastSelectedIndex(index: Int) {
         lastSelectedIndex = index
+    }
+
+    /** プレイヤーから戻る際に対象動画へフォーカスを当てるSMBパス */
+    private var pendingFocusSmbPath: String? = null
+
+    /** プレイヤーから戻る前に呼ぶ。loadCurrentPath 完了時にそのエントリへフォーカスを設定する */
+    fun setFocusOnReturn(smbVideoPath: String) {
+        pendingFocusSmbPath = smbVideoPath
     }
 
     init {
@@ -58,6 +69,12 @@ class BrowserViewModel @Inject constructor(
                 .onSuccess { entries ->
                     // フォルダと動画ファイルのみ表示
                     val filtered = entries.filter { it.isDirectory || it.isVideo }
+                    // プレイヤーから戻った際のフォーカス復元
+                    pendingFocusSmbPath?.let { targetPath ->
+                        val idx = filtered.indexOfFirst { it.path == targetPath }
+                        if (idx >= 0) lastSelectedIndex = idx
+                        pendingFocusSmbPath = null
+                    }
                     _uiState.value = BrowserUiState.Success(filtered)
                 }
                 .onFailure { e ->
@@ -69,7 +86,9 @@ class BrowserViewModel @Inject constructor(
     /** フォルダを開く */
     fun openDirectory(entry: SmbEntry) {
         if (!entry.isDirectory) return
-        // SMB URLからパスのみ抽出して追加
+        // 現在の選択インデックスを保存してからフォルダに入る
+        selectedIndexStack.addLast(lastSelectedIndex)
+        lastSelectedIndex = 0
         val relativePath = extractRelativePath(entry.path)
         pathStack.addLast(relativePath)
         loadCurrentPath()
@@ -79,6 +98,8 @@ class BrowserViewModel @Inject constructor(
     fun goBack(): Boolean {
         if (pathStack.isEmpty()) return false
         pathStack.removeLast()
+        // 直前の選択インデックスを復元する
+        lastSelectedIndex = selectedIndexStack.removeLastOrNull() ?: 0
         loadCurrentPath()
         return true
     }
