@@ -134,7 +134,7 @@ fun BrowserScreen(
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Adaptive(minSize = 200.dp),
-                    contentPadding = PaddingValues(4.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
