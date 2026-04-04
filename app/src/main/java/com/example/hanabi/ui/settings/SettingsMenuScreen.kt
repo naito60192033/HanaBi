@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -31,6 +32,7 @@ import androidx.tv.material3.Text
 fun SettingsMenuScreen(
     onNavigateToNasSettings: () -> Unit,
     onNavigateToAppSettings: () -> Unit,
+    onNavigateToUpdate: () -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler { onBack() }
@@ -46,8 +48,8 @@ fun SettingsMenuScreen(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.width(320.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.width(360.dp)
         ) {
             Text(
                 text = "設定",
@@ -68,6 +70,12 @@ fun SettingsMenuScreen(
                 label = "再生設定",
                 description = "自動再生・再生速度・スキップ秒数",
                 onClick = onNavigateToAppSettings
+            )
+
+            MenuButton(
+                label = "アップデートを確認",
+                description = "最新バージョンの確認とインストール",
+                onClick = onNavigateToUpdate
             )
         }
     }
@@ -90,6 +98,7 @@ private fun MenuButton(
     Button(
         onClick = onClick,
         modifier = modifier,
+        shape = ButtonDefaults.shape(shape = RoundedCornerShape(8.dp)),
         colors = ButtonDefaults.colors(
             containerColor = Color(0xFF2A2A2A),
             focusedContainerColor = Color(0xFF1565C0),

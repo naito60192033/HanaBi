@@ -19,6 +19,7 @@ import com.example.hanabi.ui.player.PlayerScreen
 import com.example.hanabi.ui.settings.AppSettingsScreen
 import com.example.hanabi.ui.settings.SettingsMenuScreen
 import com.example.hanabi.ui.settings.SettingsScreen
+import com.example.hanabi.ui.settings.UpdateScreen
 import com.example.hanabi.ui.theme.HanaBiTheme
 import com.example.hanabi.viewmodel.BrowserViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -104,6 +105,7 @@ fun HanaBiNavHost() {
             SettingsMenuScreen(
                 onNavigateToNasSettings = { navController.navigate("settings") },
                 onNavigateToAppSettings = { navController.navigate("app_settings") },
+                onNavigateToUpdate = { navController.navigate("update_check") },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -118,6 +120,13 @@ fun HanaBiNavHost() {
         // アプリ再生設定画面
         composable("app_settings") {
             AppSettingsScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // アップデート確認画面
+        composable("update_check") {
+            UpdateScreen(
                 onBack = { navController.popBackStack() }
             )
         }
