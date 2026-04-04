@@ -21,7 +21,12 @@ import com.example.hanabi.data.smb.SmbConfig
 import com.example.hanabi.data.smb.SmbDataSource
 import com.example.hanabi.data.smb.SmbEntry
 import com.example.hanabi.data.smb.SmbRepository
+import com.example.hanabi.data.smb.SmbMediaDataSource
+import com.example.hanabi.player.Chapter
 import com.example.hanabi.player.DelayAudioProcessor
+import com.example.hanabi.player.MkvChapterExtractor
+import com.example.hanabi.player.Mp4ChapterExtractor
+import jcifs.smb.SmbFile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
@@ -34,6 +39,13 @@ import javax.inject.Inject
 
 /** 音声トラック・字幕トラックの情報 */
 data class TrackInfo(val index: Int, val label: String, val language: String?)
+
+/** チャプタージャンプの結果情報 */
+data class ChapterJumpInfo(
+    val forward: Boolean,
+    val isChapter: Boolean,
+    val chapterName: String?
+)
 
 /** プレイヤー画面のViewModel */
 @HiltViewModel
@@ -95,6 +107,18 @@ class PlayerViewModel @Inject constructor(
     private val _selectedSubtitleIndex = MutableStateFlow(-1)
     val selectedSubtitleIndex: StateFlow<Int> = _selectedSubtitleIndex
 
+    private val _currentPositionMs = MutableStateFlow(0L)
+    val currentPositionMs: StateFlow<Long> = _currentPositionMs
+
+    private val _durationMs = MutableStateFlow(0L)
+    val durationMs: StateFlow<Long> = _durationMs
+
+    private val _videoTitle = MutableStateFlow("")
+    val videoTitle: StateFlow<String> = _videoTitle
+
+    private val _chapters = MutableStateFlow<List<Chapter>>(emptyList())
+    val chapters: StateFlow<List<Chapter>> = _chapters
+
     private val _autoPlayNext = MutableStateFlow(playbackPrefs.autoPlayNext)
     val autoPlayNext: StateFlow<Boolean> = _autoPlayNext
 
@@ -115,6 +139,8 @@ class PlayerViewModel @Inject constructor(
             override fun onPlaybackStateChanged(playbackState: Int) {
                 _isBuffering.value = playbackState == Player.STATE_BUFFERING
                 _isActuallyPlaying.value = player.isPlaying
+                val dur = player.duration
+                if (dur > 0) _durationMs.value = dur
                 if (playbackState == Player.STATE_ENDED) {
                     onVideoEnded()
                 }
@@ -132,11 +158,26 @@ class PlayerViewModel @Inject constructor(
         player.setPlaybackSpeed(playbackPrefs.playbackSpeed)
         // 保存済み音声言語を適用
         applyPersistedTrackPreferences()
+        // 再生位置を定期ポーリング（500ms間隔）
+        viewModelScope.launch {
+            while (true) {
+                _currentPositionMs.value = player.currentPosition.coerceAtLeast(0L)
+                val dur = player.duration
+                if (dur > 0) _durationMs.value = dur
+                delay(500)
+            }
+        }
     }
 
     /** メディアをセットして準備する（再生はまだ開始しない） */
     fun prepare(smbPath: String) {
         currentSmbPath = smbPath
+        _videoTitle.value = smbPath.substringAfterLast('/').let { filename ->
+            if ('.' in filename) filename.substringBeforeLast('.') else filename
+        }
+        _chapters.value = emptyList()
+        _currentPositionMs.value = 0L
+        _durationMs.value = 0L
         // 新しい動画では音声ディレイをリセット
         _audioDelayMs.value = 0L
         delayProcessor.setDelay(0L)
@@ -147,6 +188,27 @@ class PlayerViewModel @Inject constructor(
             player.setMediaItem(MediaItem.fromUri(smbPath))
             player.prepare()
             _isPrepared.value = true
+        }
+        // チャプター抽出（MKV/MP4/M4V、非同期でバックグラウンド実行）
+        val ext = smbPath.substringAfterLast('.').lowercase()
+        if (ext in setOf("mkv", "mp4", "m4v")) {
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val cifsContext = smbConfig.buildCifsContext()
+                    val smbFile = SmbFile(smbPath, cifsContext)
+                    val source = SmbMediaDataSource(smbFile)
+                    try {
+                        _chapters.value = when (ext) {
+                            "mkv" -> MkvChapterExtractor.extract(source)
+                            else  -> Mp4ChapterExtractor.extract(source)
+                        }
+                    } finally {
+                        source.close()
+                    }
+                } catch (_: Exception) {
+                    // チャプター抽出失敗は無視（±10分スキップにフォールバック）
+                }
+            }
         }
     }
 
@@ -194,6 +256,32 @@ class PlayerViewModel @Inject constructor(
             player.play()
             true
         }
+    }
+
+    /**
+     * 上ボタン（forward=true）: 次チャプターへジャンプ、チャプターなしは+10分スキップ
+     * 下ボタン（forward=false）: 前チャプターへジャンプ、チャプターなしは-10分スキップ
+     */
+    fun seekToChapterOrSkip(forward: Boolean): ChapterJumpInfo {
+        val chapterList = _chapters.value
+        val currentPos = player.currentPosition
+        if (chapterList.isNotEmpty()) {
+            if (forward) {
+                val next = chapterList.firstOrNull { it.positionMs > currentPos + 1000 }
+                if (next != null) {
+                    player.seekTo(next.positionMs)
+                    return ChapterJumpInfo(true, true, next.title?.toString())
+                }
+            } else {
+                val prev = chapterList.lastOrNull { it.positionMs < currentPos - 1000 }
+                if (prev != null) {
+                    player.seekTo(prev.positionMs)
+                    return ChapterJumpInfo(false, true, prev.title?.toString())
+                }
+            }
+        }
+        if (forward) seekForward(10 * 60 * 1000L) else seekBackward(10 * 60 * 1000L)
+        return ChapterJumpInfo(forward, false, null)
     }
 
     /** 再生速度を設定・永続化 */

@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -124,10 +125,8 @@ private fun SettingsPanel(
         modifier = Modifier
             .width(360.dp)
             .fillMaxHeight()
-            .background(
-                Color.Black.copy(alpha = 0.88f),
-                shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)
-            )
+            .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+            .background(Color.Black.copy(alpha = 0.88f))
             .padding(top = 16.dp, bottom = 16.dp)
     ) {
         Text(
