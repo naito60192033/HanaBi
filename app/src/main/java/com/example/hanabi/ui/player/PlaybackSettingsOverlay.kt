@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -227,18 +228,19 @@ private fun SpeedSection(
     onSelect: (Float) -> Unit,
     firstItemFocusRequester: FocusRequester
 ) {
-    Row(
+    LazyRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        SPEED_OPTIONS.forEachIndexed { idx, speed ->
+        items(SPEED_OPTIONS.size) { idx ->
+            val speed = SPEED_OPTIONS[idx]
             val isSelected = currentSpeed == speed
             val modifier = if (idx == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier
             Button(
                 onClick = { onSelect(speed) },
-                modifier = modifier.weight(1f),
+                modifier = modifier,
                 colors = ButtonDefaults.colors(
                     containerColor = if (isSelected) Color(0xFF1565C0) else Color(0xFF333333),
                     focusedContainerColor = if (isSelected) Color(0xFF1976D2) else Color(0xFF555555),
@@ -247,7 +249,7 @@ private fun SpeedSection(
                 Text(
                     text = "${speed}x".replace(".0x", "x"),
                     color = Color.White,
-                    fontSize = 12.sp
+                    fontSize = 14.sp
                 )
             }
         }

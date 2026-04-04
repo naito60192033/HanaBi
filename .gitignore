@@ -19,10 +19,10 @@ captures/
 # Sensitive
 local.properties
 
-# Claude Code（ローカル設定・タスク管理は環境依存のため除外）
-.claude/
+# Claude Code（ローカル設定・メモリは環境依存のため除外）
 CLAUDE.md
-tasks/
+.claude/memory/
+.claude/settings.local.json
 
 # タスク管理（ローカル管理のみ）
 tasks/

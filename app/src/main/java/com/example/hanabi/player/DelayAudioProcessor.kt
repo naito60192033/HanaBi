@@ -72,10 +72,12 @@ class DelayAudioProcessor : BaseAudioProcessor() {
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         if (delayMs == 0L) {
-            // ディレイなし: そのまま replaceOutputBuffer に書き込む
+            // ディレイなし: ByteArray経由でコピー（output と inputBuffer が同一オブジェクトになるのを防ぐ）
             val size = inputBuffer.remaining()
+            val bytes = ByteArray(size)
+            inputBuffer.get(bytes)
             val output = replaceOutputBuffer(size)
-            output.put(inputBuffer)
+            output.put(bytes)
             output.flip()
             return
         }
@@ -87,11 +89,14 @@ class DelayAudioProcessor : BaseAudioProcessor() {
         }
     }
 
-    /** 正ディレイ処理: silence → リングバッファ経由で遅延出力 */
+    /** 正ディレイ処理: silence → 遅延出力 */
     private fun queueInputPositiveDelay(inputBuffer: ByteBuffer) {
         val inputBytes = inputBuffer.remaining()
-        val totalOutputSize = delaySilenceRemaining + inputBytes
+        // ByteArray に先読みしてから replaceOutputBuffer を呼ぶ（同一バッファ問題を回避）
+        val inputData = ByteArray(inputBytes)
+        inputBuffer.get(inputData)
 
+        val totalOutputSize = delaySilenceRemaining + inputBytes
         if (totalOutputSize == 0) return
         val output = replaceOutputBuffer(totalOutputSize)
 
@@ -101,8 +106,7 @@ class DelayAudioProcessor : BaseAudioProcessor() {
             delaySilenceRemaining = 0
         }
 
-        // 入力をそのまま出力（リングバッファは使わず、シンプルな遅延実装）
-        output.put(inputBuffer)
+        output.put(inputData)
         output.flip()
     }
 
@@ -118,8 +122,11 @@ class DelayAudioProcessor : BaseAudioProcessor() {
         val remaining = inputBuffer.remaining()
         if (remaining == 0) return
 
+        // ByteArray に先読みしてから replaceOutputBuffer を呼ぶ（同一バッファ問題を回避）
+        val bytes = ByteArray(remaining)
+        inputBuffer.get(bytes)
         val output = replaceOutputBuffer(remaining)
-        output.put(inputBuffer)
+        output.put(bytes)
         output.flip()
     }
 }

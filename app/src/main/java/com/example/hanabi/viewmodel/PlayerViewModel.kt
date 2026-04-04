@@ -68,6 +68,9 @@ class PlayerViewModel @Inject constructor(
     private val _savedProgress = MutableStateFlow<PlaybackProgress?>(null)
     val savedProgress: StateFlow<PlaybackProgress?> = _savedProgress
 
+    private val _isPrepared = MutableStateFlow(false)
+    val isPrepared: StateFlow<Boolean> = _isPrepared
+
     private val _isBuffering = MutableStateFlow(false)
     val isBuffering: StateFlow<Boolean> = _isBuffering
 
@@ -129,11 +132,13 @@ class PlayerViewModel @Inject constructor(
         // 新しい動画では音声ディレイをリセット
         _audioDelayMs.value = 0L
         delayProcessor.setDelay(0L)
+        _isPrepared.value = false
         viewModelScope.launch {
             val progress = playbackDao.getProgress(smbPath)
             _savedProgress.value = progress
             player.setMediaItem(MediaItem.fromUri(smbPath))
             player.prepare()
+            _isPrepared.value = true
         }
     }
 
@@ -158,8 +163,9 @@ class PlayerViewModel @Inject constructor(
 
     /** 早送り */
     fun seekForward(ms: Long = playbackPrefs.seekForwardSec * 1000L) {
-        val duration = player.duration.takeIf { it > 0 } ?: return
-        val newPos = (player.currentPosition + ms).coerceAtMost(duration)
+        val current = player.currentPosition
+        val duration = player.duration
+        val newPos = if (duration > 0) (current + ms).coerceAtMost(duration) else current + ms
         player.seekTo(newPos)
     }
 

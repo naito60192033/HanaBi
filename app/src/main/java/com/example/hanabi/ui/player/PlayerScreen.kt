@@ -71,6 +71,7 @@ fun PlayerScreen(
     onNavigateToPlayer: (String) -> Unit,
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
+    val isPrepared by viewModel.isPrepared.collectAsState()
     val savedProgress by viewModel.savedProgress.collectAsState()
     val isBuffering by viewModel.isBuffering.collectAsState()
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
@@ -83,7 +84,6 @@ fun PlayerScreen(
     val nextEpisode by viewModel.nextEpisode.collectAsState()
     val showNextEpisodeBanner by viewModel.showNextEpisodeBanner.collectAsState()
 
-    var isReady by remember { mutableStateOf(false) }
     val seekEvent = remember { mutableStateOf<SeekEvent?>(null) }
     val accumulator = remember { SeekAccumulator() }
     val showSettingsOverlay = remember { mutableStateOf(false) }
@@ -177,13 +177,6 @@ fun PlayerScreen(
         viewModel.prepare(smbPath)
     }
 
-    // 保存済み位置が確認できたら準備完了
-    LaunchedEffect(savedProgress) {
-        if (savedProgress != null || !isReady) {
-            isReady = true
-        }
-    }
-
     BackHandler {
         if (showSettingsOverlay.value) {
             showSettingsOverlay.value = false
@@ -198,20 +191,7 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        if (!isReady) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-        } else if (savedProgress != null && !savedProgress!!.isFinished && savedProgress!!.positionMs > 30_000) {
-            ResumeDialog(
-                progress = savedProgress!!,
-                onResume = { viewModel.resumePlayback() },
-                onPlayFromBeginning = { viewModel.playFromBeginning() }
-            )
-        } else {
-            LaunchedEffect(Unit) {
-                viewModel.playFromBeginning()
-            }
-        }
-
+        // PlayerView は最初に配置（Boxの最背面）
         AndroidView(
             factory = { context ->
                 PlayerView(context).apply {
@@ -232,9 +212,24 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // バッファリング中のスピナーオーバーレイ
-        if (isBuffering) {
+        // 準備中 or バッファリング中のスピナー
+        if (!isPrepared || isBuffering) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+        }
+
+        // isPrepared になったら再生開始判断
+        if (isPrepared) {
+            if (savedProgress != null && !savedProgress!!.isFinished && savedProgress!!.positionMs > 30_000) {
+                ResumeDialog(
+                    progress = savedProgress!!,
+                    onResume = { viewModel.resumePlayback() },
+                    onPlayFromBeginning = { viewModel.playFromBeginning() }
+                )
+            } else {
+                LaunchedEffect(Unit) {
+                    viewModel.playFromBeginning()
+                }
+            }
         }
 
         // シークインジケーターオーバーレイ
