@@ -74,6 +74,9 @@ class PlayerViewModel @Inject constructor(
     private val _isBuffering = MutableStateFlow(false)
     val isBuffering: StateFlow<Boolean> = _isBuffering
 
+    private val _isActuallyPlaying = MutableStateFlow(false)
+    val isActuallyPlaying: StateFlow<Boolean> = _isActuallyPlaying
+
     private val _playbackSpeed = MutableStateFlow(playbackPrefs.playbackSpeed)
     val playbackSpeed: StateFlow<Float> = _playbackSpeed
 
@@ -111,9 +114,14 @@ class PlayerViewModel @Inject constructor(
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 _isBuffering.value = playbackState == Player.STATE_BUFFERING
+                _isActuallyPlaying.value = player.isPlaying
                 if (playbackState == Player.STATE_ENDED) {
                     onVideoEnded()
                 }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                _isActuallyPlaying.value = isPlaying
             }
 
             override fun onTracksChanged(tracks: Tracks) {
