@@ -15,4 +15,7 @@ interface PlaybackDao {
 
     @Query("DELETE FROM playback_progress WHERE smbPath = :path")
     suspend fun deleteProgress(path: String)
+
+    @Query("DELETE FROM playback_progress")
+    suspend fun deleteAllProgress()
 }

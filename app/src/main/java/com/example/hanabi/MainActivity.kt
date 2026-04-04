@@ -12,10 +12,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.runtime.remember
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.hanabi.ui.browser.BrowserScreen
 import com.example.hanabi.ui.player.PlayerScreen
+import com.example.hanabi.ui.settings.AppSettingsScreen
+import com.example.hanabi.ui.settings.SettingsMenuScreen
 import com.example.hanabi.ui.settings.SettingsScreen
 import com.example.hanabi.ui.theme.HanaBiTheme
+import com.example.hanabi.viewmodel.BrowserViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -37,12 +42,15 @@ class MainActivity : ComponentActivity() {
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (playerKeyHandler?.invoke(event) == true) return true
+        if (menuKeyHandler?.invoke(event) == true) return true
         return super.dispatchKeyEvent(event)
     }
 
     companion object {
         /** PlayerScreen がアクティブな間だけ登録されるキーハンドラー */
         var playerKeyHandler: ((KeyEvent) -> Boolean)? = null
+        /** BrowserScreen がアクティブな間だけ登録されるメニューキーハンドラー */
+        var menuKeyHandler: ((KeyEvent) -> Boolean)? = null
     }
 }
 
@@ -65,7 +73,7 @@ fun HanaBiNavHost() {
                     navController.navigate("player/${smbPath.encodeForNav()}")
                 },
                 onNavigateToSettings = {
-                    navController.navigate("settings")
+                    navController.navigate("settings_menu")
                 }
             )
         }
@@ -73,8 +81,29 @@ fun HanaBiNavHost() {
         // 動画プレイヤー画面
         composable("player/{smbPath}") { backStackEntry ->
             val smbPath = backStackEntry.arguments?.getString("smbPath")?.decodeFromNav() ?: ""
+            val browserEntry = remember(navController) { navController.getBackStackEntry("browser") }
+            val browserVm: BrowserViewModel = hiltViewModel(browserEntry)
             PlayerScreen(
                 smbPath = smbPath,
+                onBack = {
+                    // 現在再生中の動画にフォーカスを当ててからブラウザへ戻る
+                    browserVm.setFocusOnReturn(smbPath)
+                    navController.popBackStack("browser", inclusive = false)
+                },
+                onNavigateToPlayer = { nextPath ->
+                    // 現在のプレイヤーをスタックせず置き換える（戻るボタンでブラウザに戻れるように）
+                    navController.navigate("player/${nextPath.encodeForNav()}") {
+                        popUpTo("player/{smbPath}") { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        // 設定メニュー画面
+        composable("settings_menu") {
+            SettingsMenuScreen(
+                onNavigateToNasSettings = { navController.navigate("settings") },
+                onNavigateToAppSettings = { navController.navigate("app_settings") },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -82,6 +111,13 @@ fun HanaBiNavHost() {
         // NAS接続設定画面
         composable("settings") {
             SettingsScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // アプリ再生設定画面
+        composable("app_settings") {
+            AppSettingsScreen(
                 onBack = { navController.popBackStack() }
             )
         }

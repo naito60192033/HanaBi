@@ -45,6 +45,14 @@ class BrowserViewModel @Inject constructor(
         lastSelectedIndex = index
     }
 
+    /** プレイヤーから戻る際に対象動画へフォーカスを当てるSMBパス */
+    private var pendingFocusSmbPath: String? = null
+
+    /** プレイヤーから戻る前に呼ぶ。loadCurrentPath 完了時にそのエントリへフォーカスを設定する */
+    fun setFocusOnReturn(smbVideoPath: String) {
+        pendingFocusSmbPath = smbVideoPath
+    }
+
     init {
         loadCurrentPath()
     }
@@ -61,6 +69,12 @@ class BrowserViewModel @Inject constructor(
                 .onSuccess { entries ->
                     // フォルダと動画ファイルのみ表示
                     val filtered = entries.filter { it.isDirectory || it.isVideo }
+                    // プレイヤーから戻った際のフォーカス復元
+                    pendingFocusSmbPath?.let { targetPath ->
+                        val idx = filtered.indexOfFirst { it.path == targetPath }
+                        if (idx >= 0) lastSelectedIndex = idx
+                        pendingFocusSmbPath = null
+                    }
                     _uiState.value = BrowserUiState.Success(filtered)
                 }
                 .onFailure { e ->

@@ -28,6 +28,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.tv.material3.*
 import coil.compose.AsyncImage
+import android.view.KeyEvent
+import com.example.hanabi.MainActivity
 import com.example.hanabi.data.smb.SmbEntry
 import com.example.hanabi.data.smb.SmbThumbnailKey
 import com.example.hanabi.viewmodel.BrowserUiState
@@ -66,6 +68,17 @@ fun BrowserScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // メニューボタンで設定画面へ遷移
+    DisposableEffect(Unit) {
+        MainActivity.menuKeyHandler = { event ->
+            if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_MENU) {
+                onNavigateToSettings()
+                true
+            } else false
+        }
+        onDispose { MainActivity.menuKeyHandler = null }
     }
 
     // Androidのバックキーでフォルダ階層を上に戻る
