@@ -68,12 +68,26 @@ private class SeekAccumulator {
 fun PlayerScreen(
     smbPath: String,
     onBack: () -> Unit,
+    onNavigateToPlayer: (String) -> Unit,
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val savedProgress by viewModel.savedProgress.collectAsState()
+    val isBuffering by viewModel.isBuffering.collectAsState()
+    val playbackSpeed by viewModel.playbackSpeed.collectAsState()
+    val audioTracks by viewModel.audioTracks.collectAsState()
+    val subtitleTracks by viewModel.subtitleTracks.collectAsState()
+    val selectedAudioIndex by viewModel.selectedAudioIndex.collectAsState()
+    val selectedSubtitleIndex by viewModel.selectedSubtitleIndex.collectAsState()
+    val audioDelayMs by viewModel.audioDelayMs.collectAsState()
+    val autoPlayNext by viewModel.autoPlayNext.collectAsState()
+    val nextEpisode by viewModel.nextEpisode.collectAsState()
+    val showNextEpisodeBanner by viewModel.showNextEpisodeBanner.collectAsState()
+
     var isReady by remember { mutableStateOf(false) }
     val seekEvent = remember { mutableStateOf<SeekEvent?>(null) }
     val accumulator = remember { SeekAccumulator() }
+    val showSettingsOverlay = remember { mutableStateOf(false) }
+
     // showController() 呼び出しのために PlayerView の参照を保持
     val playerViewRef = remember { mutableStateOf<PlayerView?>(null) }
     // スキップ中だけ中央の再生/一時停止ボタンを隠すための参照
@@ -87,48 +101,75 @@ fun PlayerScreen(
     DisposableEffect(Unit) {
         MainActivity.playerKeyHandler = { event ->
             if (event.action == KeyEvent.ACTION_DOWN) {
-                when (event.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        viewModel.seekForward()
-                        val total = accumulator.accumulate(SeekDirection.FORWARD, 30_000)
-                        seekEvent.value = SeekEvent(
-                            direction = SeekDirection.FORWARD,
-                            totalMs = total,
-                            id = System.currentTimeMillis()
-                        )
-                        // タイムバーを表示しつつ中央の再生/一時停止ボタンだけ隠す
-                        playPauseBtnRef.value?.visibility = View.INVISIBLE
-                        playerViewRef.value?.showController()
-                        true
+                // 設定オーバーレイ表示中は MENU/BACK のみ処理、他はオーバーレイに委譲
+                if (showSettingsOverlay.value) {
+                    when (event.keyCode) {
+                        KeyEvent.KEYCODE_MENU -> {
+                            showSettingsOverlay.value = false
+                            true
+                        }
+                        else -> false
                     }
-                    KeyEvent.KEYCODE_DPAD_LEFT -> {
-                        viewModel.seekBackward()
-                        val total = accumulator.accumulate(SeekDirection.BACKWARD, 10_000)
-                        seekEvent.value = SeekEvent(
-                            direction = SeekDirection.BACKWARD,
-                            totalMs = total,
-                            id = System.currentTimeMillis()
-                        )
-                        // タイムバーを表示しつつ中央の再生/一時停止ボタンだけ隠す
-                        playPauseBtnRef.value?.visibility = View.INVISIBLE
-                        playerViewRef.value?.showController()
-                        true
+                } else {
+                    when (event.keyCode) {
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            viewModel.seekForward()
+                            val total = accumulator.accumulate(
+                                SeekDirection.FORWARD, viewModel.seekForwardMs
+                            )
+                            seekEvent.value = SeekEvent(
+                                direction = SeekDirection.FORWARD,
+                                totalMs = total,
+                                id = System.currentTimeMillis()
+                            )
+                            playPauseBtnRef.value?.visibility = View.INVISIBLE
+                            playerViewRef.value?.showController()
+                            true
+                        }
+                        KeyEvent.KEYCODE_DPAD_LEFT -> {
+                            viewModel.seekBackward()
+                            val total = accumulator.accumulate(
+                                SeekDirection.BACKWARD, viewModel.seekBackwardMs
+                            )
+                            seekEvent.value = SeekEvent(
+                                direction = SeekDirection.BACKWARD,
+                                totalMs = total,
+                                id = System.currentTimeMillis()
+                            )
+                            playPauseBtnRef.value?.visibility = View.INVISIBLE
+                            playerViewRef.value?.showController()
+                            true
+                        }
+                        KeyEvent.KEYCODE_DPAD_CENTER,
+                        KeyEvent.KEYCODE_ENTER,
+                        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                            val isNowPlaying = viewModel.togglePlayPause()
+                            playPauseBtnRef.value?.visibility = View.VISIBLE
+                            if (isNowPlaying) {
+                                playerViewRef.value?.hideController()
+                            } else {
+                                playerViewRef.value?.showController()
+                            }
+                            true
+                        }
+                        KeyEvent.KEYCODE_MENU -> {
+                            showSettingsOverlay.value = true
+                            true
+                        }
+                        else -> false
                     }
-                    KeyEvent.KEYCODE_DPAD_CENTER,
-                    KeyEvent.KEYCODE_ENTER,
-                    KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                        viewModel.togglePlayPause()
-                        // 一時停止・再生時は中央ボタンを戻してコントローラーを表示
-                        playPauseBtnRef.value?.visibility = View.VISIBLE
-                        playerViewRef.value?.showController()
-                        true
-                    }
-                    else -> false
                 }
             } else false
         }
         onDispose {
             MainActivity.playerKeyHandler = null
+        }
+    }
+
+    // 次エピソード自動遷移イベントを受信
+    LaunchedEffect(Unit) {
+        viewModel.navigationEvent.collect { nextPath ->
+            onNavigateToPlayer(nextPath)
         }
     }
 
@@ -144,8 +185,12 @@ fun PlayerScreen(
     }
 
     BackHandler {
-        viewModel.saveProgress()
-        onBack()
+        if (showSettingsOverlay.value) {
+            showSettingsOverlay.value = false
+        } else {
+            viewModel.saveProgress()
+            onBack()
+        }
     }
 
     Box(
@@ -154,35 +199,26 @@ fun PlayerScreen(
             .background(Color.Black)
     ) {
         if (!isReady) {
-            // 読み込み中インジケーター
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         } else if (savedProgress != null && !savedProgress!!.isFinished && savedProgress!!.positionMs > 30_000) {
-            // 続きから再生するか確認するダイアログ
             ResumeDialog(
                 progress = savedProgress!!,
                 onResume = { viewModel.resumePlayback() },
                 onPlayFromBeginning = { viewModel.playFromBeginning() }
             )
         } else {
-            // 再生開始
             LaunchedEffect(Unit) {
                 viewModel.playFromBeginning()
             }
         }
 
-        // ExoPlayer ビュー
-        // キー処理はすべて Activity ハンドラーに委譲しているので、
-        // ここでは標準の PlayerView をそのまま使う。
         AndroidView(
             factory = { context ->
                 PlayerView(context).apply {
                     player = viewModel.player
                     useController = true
-                    // スキップ時のバッファリングで自動表示されないよう false に設定。
-                    // 一時停止・再生時は Activity ハンドラーから明示的に showController() を呼ぶ。
                     controllerAutoShow = false
                     controllerShowTimeoutMs = 3000
-                    // 不要なコントローラーボタンを非表示
                     setShowRewindButton(false)
                     setShowFastForwardButton(false)
                     setShowPreviousButton(false)
@@ -190,14 +226,18 @@ fun PlayerScreen(
                     setShowShuffleButton(false)
                 }.also {
                     playerViewRef.value = it
-                    // ExoPlayer コントローラー内の再生/一時停止ボタン参照を保持
                     playPauseBtnRef.value = it.findViewById(androidx.media3.ui.R.id.exo_play_pause)
                 }
             },
             modifier = Modifier.fillMaxSize()
         )
 
-        // シークインジケーターオーバーレイ（左右に累積秒数を表示）
+        // バッファリング中のスピナーオーバーレイ
+        if (isBuffering) {
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+        }
+
+        // シークインジケーターオーバーレイ
         val currentSeekEvent = seekEvent.value
         AnimatedVisibility(
             visible = currentSeekEvent != null,
@@ -214,13 +254,39 @@ fun PlayerScreen(
                 )
             }
         }
+
+        // 再生設定オーバーレイ
+        PlaybackSettingsOverlay(
+            visible = showSettingsOverlay.value,
+            playbackSpeed = playbackSpeed,
+            audioTracks = audioTracks,
+            subtitleTracks = subtitleTracks,
+            selectedAudioIndex = selectedAudioIndex,
+            selectedSubtitleIndex = selectedSubtitleIndex,
+            audioDelayMs = audioDelayMs,
+            autoPlayNext = autoPlayNext,
+            onSpeedChange = viewModel::setPlaybackSpeed,
+            onAudioTrackSelect = viewModel::selectAudioTrack,
+            onSubtitleTrackSelect = viewModel::selectSubtitleTrack,
+            onAudioDelayChange = viewModel::setAudioDelay,
+            onAutoPlayNextChange = viewModel::setAutoPlayNext,
+            onClose = { showSettingsOverlay.value = false }
+        )
+
+        // 次エピソードバナー（autoPlayNext オフ時）
+        if (showNextEpisodeBanner && nextEpisode != null) {
+            NextEpisodeBanner(
+                episodeName = nextEpisode!!.name,
+                onPlay = { onNavigateToPlayer(nextEpisode!!.path) },
+                onDismiss = viewModel::dismissNextEpisodeBanner
+            )
+        }
     }
 }
 
 /** シークインジケーターオーバーレイ（左右に表示、累積秒数を反映） */
 @Composable
 private fun SeekIndicator(seekEvent: SeekEvent, onDismiss: () -> Unit) {
-    // id が変わるたびにタイマーをリセット（連続押しで延長される）
     LaunchedEffect(seekEvent.id) {
         delay(700)
         onDismiss()

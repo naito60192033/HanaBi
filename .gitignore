@@ -24,5 +24,8 @@ local.properties
 CLAUDE.md
 tasks/
 
+# タスク管理（ローカル管理のみ）
+tasks/
+
 # Gradle wrapper JAR（バイナリはコミット対象にする場合もあるが今回は除外）
 # gradle/wrapper/gradle-wrapper.jar

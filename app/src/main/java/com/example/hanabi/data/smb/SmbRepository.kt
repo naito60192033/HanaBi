@@ -6,6 +6,28 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** 数字部分を数値として比較する自然順ソート用コンパレータ（ファイル名比較に使用） */
+internal val naturalStringComparator: Comparator<String> = Comparator { a, b ->
+    val aLower = a.lowercase()
+    val bLower = b.lowercase()
+    var i = 0
+    var j = 0
+    var result = 0
+    while (result == 0 && i < aLower.length && j < bLower.length) {
+        if (aLower[i].isDigit() && bLower[j].isDigit()) {
+            var numA = 0L
+            var numB = 0L
+            while (i < aLower.length && aLower[i].isDigit()) numA = numA * 10 + (aLower[i++] - '0')
+            while (j < bLower.length && bLower[j].isDigit()) numB = numB * 10 + (bLower[j++] - '0')
+            result = numA.compareTo(numB)
+        } else {
+            result = aLower[i].compareTo(bLower[j])
+            i++; j++
+        }
+    }
+    if (result != 0) result else aLower.length - bLower.length
+}
+
 /** SMB経由でNASにアクセスするリポジトリ */
 @Singleton
 class SmbRepository @Inject constructor(
@@ -39,12 +61,39 @@ class SmbRepository @Inject constructor(
                     !entry.name.startsWith(".") && entry.name != "@eaDir"
                 }
                 ?.sortedWith(
-                    // フォルダ優先、同種はアルファベット順
+                    // フォルダ優先、同種は自然順ソート（数字を数値として比較）
                     compareByDescending<SmbEntry> { it.isDirectory }
-                        .thenBy { it.name.lowercase() }
+                        .then(Comparator { a, b -> naturalStringComparator.compare(a.name, b.name) })
                 )
                 ?: emptyList()
         }
+    }
+
+    /**
+     * currentSmbUrl と同じディレクトリの次のビデオファイルを返す（なければ null）
+     * @param currentSmbUrl 現在再生中のファイルの SMB URL（canonicalPath）
+     */
+    suspend fun findNextEpisode(currentSmbUrl: String): SmbEntry? = withContext(Dispatchers.IO) {
+        runCatching {
+            // SMB URL 例: smb://host/share/Series/S01/ep01.mp4
+            val share = config.share
+            // share 以降のパスを抽出: "Series/S01/ep01.mp4"
+            val afterShare = currentSmbUrl.substringAfter("/$share/", "")
+            val dirPath = afterShare.substringBeforeLast("/", "")
+            val currentFileName = afterShare.substringAfterLast("/")
+
+            val entries = listEntries(dirPath).getOrElse { return@runCatching null }
+            val videoFiles = entries
+                .filter { it.isVideo }
+                .sortedWith(Comparator { a, b -> naturalStringComparator.compare(a.name, b.name) })
+
+            val currentIndex = videoFiles.indexOfFirst { it.name == currentFileName }
+            if (currentIndex >= 0 && currentIndex + 1 < videoFiles.size) {
+                videoFiles[currentIndex + 1]
+            } else {
+                null
+            }
+        }.getOrNull()
     }
 
     private fun buildContext() = config.buildCifsContext()
