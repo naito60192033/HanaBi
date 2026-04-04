@@ -52,8 +52,12 @@ fun AppSettingsScreen(
     val defaultSpeed by viewModel.defaultPlaybackSpeed.collectAsState()
     val seekForwardSec by viewModel.seekForwardSec.collectAsState()
     val seekBackwardSec by viewModel.seekBackwardSec.collectAsState()
+    val cacheSizeBytes by viewModel.thumbnailCacheSizeBytes.collectAsState()
     var showResetConfirm by remember { mutableStateOf(false) }
     var resetDone by remember { mutableStateOf(false) }
+    var cacheClearDone by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { viewModel.refreshCacheSize() }
 
     Box(
         modifier = Modifier
@@ -115,6 +119,38 @@ fun AppSettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // サムネイルキャッシュ
+            SectionLabel("サムネイルキャッシュ")
+            Text(
+                text = "現在のサイズ: ${formatBytes(cacheSizeBytes)}",
+                color = Color.White,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            if (cacheClearDone) {
+                Text(
+                    text = "クリアしました",
+                    color = Color(0xFF4CAF50),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else {
+                Button(
+                    onClick = {
+                        viewModel.clearThumbnailCache()
+                        cacheClearDone = true
+                    },
+                    colors = ButtonDefaults.colors(
+                        containerColor = Color(0xFF333333),
+                        focusedContainerColor = Color(0xFFB71C1C),
+                    )
+                ) {
+                    Text("キャッシュをクリア", color = Color.White)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // 再生履歴リセット
             SectionLabel("再生履歴")
             if (resetDone) {
@@ -150,6 +186,12 @@ fun AppSettingsScreen(
             )
         }
     }
+}
+
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1024 * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
+    bytes >= 1024 -> "%.1f KB".format(bytes / 1024.0)
+    else -> "${bytes} B"
 }
 
 @Composable

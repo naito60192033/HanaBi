@@ -2,6 +2,7 @@ package com.example.hanabi.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import coil.ImageLoader
 import com.example.hanabi.data.PlaybackPreferences
 import com.example.hanabi.data.db.PlaybackDao
 import com.example.hanabi.data.smb.SmbConfig
@@ -15,7 +16,8 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val config: SmbConfig,
     private val playbackPrefs: PlaybackPreferences,
-    private val playbackDao: PlaybackDao
+    private val playbackDao: PlaybackDao,
+    private val imageLoader: ImageLoader
 ) : ViewModel() {
 
     // NAS 接続設定
@@ -69,5 +71,24 @@ class SettingsViewModel @Inject constructor(
             playbackDao.deleteAllProgress()
             onComplete()
         }
+    }
+
+    // サムネイルキャッシュ
+    private val _thumbnailCacheSizeBytes = MutableStateFlow(0L)
+    val thumbnailCacheSizeBytes: StateFlow<Long> = _thumbnailCacheSizeBytes
+
+    fun refreshCacheSize() {
+        val cacheDir = imageLoader.diskCache?.directory?.toFile()
+        _thumbnailCacheSizeBytes.value = cacheDir
+            ?.walkTopDown()
+            ?.filter { it.isFile }
+            ?.sumOf { it.length() }
+            ?: 0L
+    }
+
+    fun clearThumbnailCache() {
+        imageLoader.diskCache?.clear()
+        imageLoader.memoryCache?.clear()
+        _thumbnailCacheSizeBytes.value = 0L
     }
 }
