@@ -144,6 +144,7 @@ class PlayerViewModel @Inject constructor(
 
     /** 最初から再生 */
     fun playFromBeginning() {
+        _savedProgress.value = null
         player.seekTo(0)
         player.play()
         startProgressSaving()
@@ -152,6 +153,7 @@ class PlayerViewModel @Inject constructor(
     /** 続きから再生 */
     fun resumePlayback() {
         val position = _savedProgress.value?.positionMs ?: 0L
+        _savedProgress.value = null
         player.seekTo(position)
         player.play()
         startProgressSaving()

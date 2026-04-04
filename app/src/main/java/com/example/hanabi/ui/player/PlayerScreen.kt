@@ -14,6 +14,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -88,10 +90,19 @@ fun PlayerScreen(
     val accumulator = remember { SeekAccumulator() }
     val showSettingsOverlay = remember { mutableStateOf(false) }
 
+    // 再生開始済みフラグ（ダイアログ選択後に LaunchedEffect(Unit) が再実行されるのを防ぐ）
+    var playbackInitiated by remember { mutableStateOf(false) }
+
     // showController() 呼び出しのために PlayerView の参照を保持
     val playerViewRef = remember { mutableStateOf<PlayerView?>(null) }
     // スキップ中だけ中央の再生/一時停止ボタンを隠すための参照
     val playPauseBtnRef = remember { mutableStateOf<View?>(null) }
+
+    // 再開ダイアログ表示中かを playerKeyHandler から参照するための状態
+    val showResumeDialog = remember { mutableStateOf(false) }
+    val shouldShowResumeDialog = isPrepared && savedProgress != null &&
+        !savedProgress!!.isFinished && savedProgress!!.positionMs > 30_000
+    SideEffect { showResumeDialog.value = shouldShowResumeDialog }
 
     // ---------------------------------------------------------------
     // Activity 最上位でキーを捕捉（PlayerView / ExoPlayer より前に処理）
@@ -101,8 +112,11 @@ fun PlayerScreen(
     DisposableEffect(Unit) {
         MainActivity.playerKeyHandler = { event ->
             if (event.action == KeyEvent.ACTION_DOWN) {
+                when {
+                // 再開ダイアログ表示中は全キーをComposeに委譲（ボタンフォーカスで処理）
+                showResumeDialog.value -> false
                 // 設定オーバーレイ表示中は MENU/BACK のみ処理、他はオーバーレイに委譲
-                if (showSettingsOverlay.value) {
+                showSettingsOverlay.value -> {
                     when (event.keyCode) {
                         KeyEvent.KEYCODE_MENU -> {
                             showSettingsOverlay.value = false
@@ -110,7 +124,8 @@ fun PlayerScreen(
                         }
                         else -> false
                     }
-                } else {
+                }
+                else -> {
                     when (event.keyCode) {
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
                             viewModel.seekForward()
@@ -159,6 +174,7 @@ fun PlayerScreen(
                         else -> false
                     }
                 }
+                } // when
             } else false
         }
         onDispose {
@@ -174,6 +190,7 @@ fun PlayerScreen(
     }
 
     LaunchedEffect(smbPath) {
+        playbackInitiated = false
         viewModel.prepare(smbPath)
     }
 
@@ -217,16 +234,23 @@ fun PlayerScreen(
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         }
 
-        // isPrepared になったら再生開始判断
-        if (isPrepared) {
+        // isPrepared になったら再生開始判断（playbackInitiated で二重実行を防ぐ）
+        if (isPrepared && !playbackInitiated) {
             if (savedProgress != null && !savedProgress!!.isFinished && savedProgress!!.positionMs > 30_000) {
                 ResumeDialog(
                     progress = savedProgress!!,
-                    onResume = { viewModel.resumePlayback() },
-                    onPlayFromBeginning = { viewModel.playFromBeginning() }
+                    onResume = {
+                        playbackInitiated = true
+                        viewModel.resumePlayback()
+                    },
+                    onPlayFromBeginning = {
+                        playbackInitiated = true
+                        viewModel.playFromBeginning()
+                    }
                 )
             } else {
                 LaunchedEffect(Unit) {
+                    playbackInitiated = true
                     viewModel.playFromBeginning()
                 }
             }
@@ -334,6 +358,9 @@ private fun ResumeDialog(
     onResume: () -> Unit,
     onPlayFromBeginning: () -> Unit
 ) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -354,7 +381,10 @@ private fun ResumeDialog(
                 color = Color.Gray
             )
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Button(onClick = onResume) {
+                Button(
+                    onClick = onResume,
+                    modifier = Modifier.focusRequester(focusRequester)
+                ) {
                     Text("続きから再生")
                 }
                 OutlinedButton(onClick = onPlayFromBeginning) {
