@@ -56,7 +56,7 @@ class SmbImageFetcher(
         try {
             retriever.setDataSource(mediaSource)
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLong() ?: 0L
-            val positionUs = durationMs * 1000L * 5 / 100
+            val positionUs = durationMs * 1000L * 15 / 100
             val bitmap = retriever.getFrameAtTime(positionUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                 ?: error("フレーム抽出失敗: ${smbFile.name}")
             return ByteArrayOutputStream().use { out ->
