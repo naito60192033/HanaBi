@@ -20,6 +20,7 @@ captures/
 local.properties
 
 # Claude Code（ローカル設定・メモリは環境依存のため除外）
+CLAUDE.md
 .claude/memory/
 .claude/settings.local.json
 
