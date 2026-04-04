@@ -4,6 +4,7 @@ package com.example.hanabi.ui.player
 
 import android.view.KeyEvent
 import android.view.View
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -11,20 +12,21 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.media3.ui.PlayerView
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.PlayerView
 import androidx.tv.material3.*
 import com.example.hanabi.MainActivity
 import com.example.hanabi.data.db.PlaybackProgress
@@ -76,6 +78,7 @@ fun PlayerScreen(
     val isPrepared by viewModel.isPrepared.collectAsState()
     val savedProgress by viewModel.savedProgress.collectAsState()
     val isBuffering by viewModel.isBuffering.collectAsState()
+    val isActuallyPlaying by viewModel.isActuallyPlaying.collectAsState()
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
     val audioTracks by viewModel.audioTracks.collectAsState()
     val subtitleTracks by viewModel.subtitleTracks.collectAsState()
@@ -85,6 +88,23 @@ fun PlayerScreen(
     val autoPlayNext by viewModel.autoPlayNext.collectAsState()
     val nextEpisode by viewModel.nextEpisode.collectAsState()
     val showNextEpisodeBanner by viewModel.showNextEpisodeBanner.collectAsState()
+
+    // 再生中のみ画面を常時点灯（スクリーンセーバー防止）
+    val activity = LocalContext.current as? MainActivity
+    LaunchedEffect(isActuallyPlaying) {
+        val window = activity?.window ?: return@LaunchedEffect
+        if (isActuallyPlaying) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            // 画面離脱時に必ずフラグを解除する
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
 
     val seekEvent = remember { mutableStateOf<SeekEvent?>(null) }
     val accumulator = remember { SeekAccumulator() }
