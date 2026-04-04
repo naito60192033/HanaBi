@@ -5,6 +5,7 @@ package com.example.hanabi.viewmodel
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -34,6 +35,8 @@ class PlayerViewModel @Inject constructor(
         .setMediaSourceFactory(
             ProgressiveMediaSource.Factory(SmbDataSource.Factory(smbConfig))
         )
+        // 再生中のスリープ防止（CPU Wake Lock + Wi-Fi Lock を自動管理）
+        .setWakeMode(C.WAKE_MODE_NETWORK)
         .build()
 
     private val _savedProgress = MutableStateFlow<PlaybackProgress?>(null)
