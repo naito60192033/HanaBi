@@ -47,6 +47,7 @@ fun BrowserScreen(
     val uiState by viewModel.uiState.collectAsState()
     val gridState = rememberLazyGridState()
     val focusRequester = remember { FocusRequester() }
+    val settingsFocusRequester = remember { FocusRequester() }
 
     // グリッドの列数（レイアウト情報から動的に取得）
     val columnCount by remember {
@@ -126,7 +127,10 @@ fun BrowserScreen(
                 style = MaterialTheme.typography.headlineMedium,
                 color = Color.White
             )
-            IconButton(onClick = onNavigateToSettings) {
+            IconButton(
+                onClick = onNavigateToSettings,
+                modifier = Modifier.focusRequester(settingsFocusRequester)
+            ) {
                 Icon(Icons.Default.Settings, contentDescription = "設定", tint = Color.White)
             }
         }
@@ -194,7 +198,7 @@ fun BrowserScreen(
                                 }
                             },
                             onWrapFocus = { targetIndex -> wrapTargetIndex = targetIndex },
-                            onNavigateToSettings = onNavigateToSettings
+                            onFocusSettings = { settingsFocusRequester.requestFocus() }
                         )
                     }
                 }
@@ -213,7 +217,7 @@ private fun EntryCard(
     totalCount: Int,
     onClick: () -> Unit,
     onWrapFocus: (Int) -> Unit,
-    onNavigateToSettings: () -> Unit,
+    onFocusSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isFirstInRow = index % columnCount == 0
@@ -239,7 +243,7 @@ private fun EntryCard(
                         else -> true                                   // 先頭アイテム: 何もしない
                     }
                     KeyEvent.KEYCODE_DPAD_UP -> {
-                        if (isInFirstRow) { onNavigateToSettings(); true } else false
+                        if (isInFirstRow) { onFocusSettings(); true } else false
                     }
                     else -> false
                 }

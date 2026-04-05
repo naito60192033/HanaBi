@@ -5,6 +5,7 @@ import android.media.MediaMetadataRetriever
 import coil.ImageLoader
 import coil.decode.DataSource
 import coil.decode.ImageSource
+import coil.disk.DiskCache
 import coil.fetch.FetchResult
 import coil.fetch.Fetcher
 import coil.fetch.SourceResult
@@ -26,18 +27,44 @@ data class SmbThumbnailKey(val path: String)
 class SmbImageFetcher(
     private val rawPath: String,
     private val config: SmbConfig,
-    private val options: Options
+    private val options: Options,
+    private val diskCache: DiskCache?
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult = withContext(Dispatchers.IO) {
+        val cacheKey = rawPath
+
+        // ディスクキャッシュにヒットすれば即返す
+        diskCache?.openSnapshot(cacheKey)?.use { snapshot ->
+            return@withContext SourceResult(
+                source = ImageSource(
+                    file = snapshot.data,
+                    fileSystem = diskCache.fileSystem,
+                    diskCacheKey = cacheKey
+                ),
+                mimeType = "image/jpeg",
+                dataSource = DataSource.DISK
+            )
+        }
+
+        // キャッシュミス: NAS から取得
         val cifsContext = config.buildCifsContext()
-        // rawPath を URI 解析せず直接 SmbFile に渡す（# 等の特殊文字が壊れない）
         val smbFile = SmbFile(rawPath, cifsContext)
 
         val bytes = if (isVideoPath(rawPath)) {
             extractVideoFrame(smbFile)
         } else {
             smbFile.openInputStream().use { it.readBytes() }
+        }
+
+        // ディスクキャッシュに書き込む
+        diskCache?.openEditor(cacheKey)?.let { editor ->
+            try {
+                diskCache.fileSystem.write(editor.data) { write(bytes) }
+                editor.commit()
+            } catch (e: Exception) {
+                editor.abort()
+            }
         }
 
         SourceResult(
@@ -71,7 +98,7 @@ class SmbImageFetcher(
 
     class Factory @Inject constructor(private val config: SmbConfig) : Fetcher.Factory<SmbThumbnailKey> {
         override fun create(data: SmbThumbnailKey, options: Options, imageLoader: ImageLoader): Fetcher =
-            SmbImageFetcher(data.path, config, options)
+            SmbImageFetcher(data.path, config, options, imageLoader.diskCache)
     }
 
     companion object {
