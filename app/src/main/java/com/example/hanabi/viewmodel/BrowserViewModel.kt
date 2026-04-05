@@ -64,7 +64,10 @@ class BrowserViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            _uiState.value = BrowserUiState.Loading
+            // 既にデータが表示されている場合はLoading状態にしない（画面チラつき防止）
+            if (_uiState.value !is BrowserUiState.Success) {
+                _uiState.value = BrowserUiState.Loading
+            }
             repository.listEntries(currentPath)
                 .onSuccess { entries ->
                     // フォルダと動画ファイルのみ表示

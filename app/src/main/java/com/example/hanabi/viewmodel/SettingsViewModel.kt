@@ -97,12 +97,7 @@ class SettingsViewModel @Inject constructor(
     val thumbnailCacheSizeBytes: StateFlow<Long> = _thumbnailCacheSizeBytes
 
     fun refreshCacheSize() {
-        val cacheDir = imageLoader.diskCache?.directory?.toFile()
-        _thumbnailCacheSizeBytes.value = cacheDir
-            ?.walkTopDown()
-            ?.filter { it.isFile }
-            ?.sumOf { it.length() }
-            ?: 0L
+        _thumbnailCacheSizeBytes.value = imageLoader.diskCache?.size ?: 0L
     }
 
     fun clearThumbnailCache() {

@@ -29,6 +29,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.tv.material3.*
 import coil.compose.AsyncImage
 import android.view.KeyEvent
+import androidx.compose.ui.input.key.onKeyEvent
 import com.example.hanabi.MainActivity
 import com.example.hanabi.data.smb.SmbEntry
 import com.example.hanabi.data.smb.SmbThumbnailKey
@@ -46,6 +47,28 @@ fun BrowserScreen(
     val uiState by viewModel.uiState.collectAsState()
     val gridState = rememberLazyGridState()
     val focusRequester = remember { FocusRequester() }
+
+    // グリッドの列数（レイアウト情報から動的に取得）
+    val columnCount by remember {
+        derivedStateOf {
+            (gridState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.column } ?: 0) + 1
+        }
+    }
+    // 端でのフォーカス折り返し先インデックスとFocusRequester
+    var wrapTargetIndex by remember { mutableStateOf<Int?>(null) }
+    val wrapFocusRequester = remember { FocusRequester() }
+
+    // 端キー折り返し: wrapTargetIndex が変わったらそのアイテムへスクロール＆フォーカス
+    LaunchedEffect(wrapTargetIndex) {
+        wrapTargetIndex?.let { idx ->
+            if (gridState.layoutInfo.visibleItemsInfo.none { it.index == idx }) {
+                gridState.scrollToItem(idx)
+            }
+            kotlinx.coroutines.delay(50)
+            try { wrapFocusRequester.requestFocus() } catch (_: Exception) {}
+            wrapTargetIndex = null
+        }
+    }
 
     // コンテンツ読み込み後に最終選択位置へスクロール＆フォーカス復元
     LaunchedEffect(uiState) {
@@ -154,9 +177,14 @@ fun BrowserScreen(
                     itemsIndexed(state.entries, key = { _, e -> e.path }) { index, entry ->
                         EntryCard(
                             entry = entry,
-                            modifier = if (index == viewModel.lastSelectedIndex)
-                                Modifier.focusRequester(focusRequester)
-                            else Modifier,
+                            index = index,
+                            columnCount = columnCount,
+                            totalCount = state.entries.size,
+                            modifier = when {
+                                index == viewModel.lastSelectedIndex -> Modifier.focusRequester(focusRequester)
+                                index == wrapTargetIndex -> Modifier.focusRequester(wrapFocusRequester)
+                                else -> Modifier
+                            },
                             onClick = {
                                 viewModel.setLastSelectedIndex(index)
                                 if (entry.isDirectory) {
@@ -164,7 +192,9 @@ fun BrowserScreen(
                                 } else if (entry.isVideo) {
                                     onNavigateToPlayer(entry.path)
                                 }
-                            }
+                            },
+                            onWrapFocus = { targetIndex -> wrapTargetIndex = targetIndex },
+                            onNavigateToSettings = onNavigateToSettings
                         )
                     }
                 }
@@ -178,14 +208,42 @@ fun BrowserScreen(
 @Composable
 private fun EntryCard(
     entry: SmbEntry,
+    index: Int,
+    columnCount: Int,
+    totalCount: Int,
     onClick: () -> Unit,
+    onWrapFocus: (Int) -> Unit,
+    onNavigateToSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isFirstInRow = index % columnCount == 0
+    val isLastInRow = (index % columnCount == columnCount - 1) || (index == totalCount - 1)
+    val isInFirstRow = index < columnCount
+
     Card(
         onClick = onClick,
         modifier = modifier
             .width(200.dp)
             .height(140.dp)
+            .onKeyEvent { event ->
+                if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onKeyEvent false
+                when (event.nativeKeyEvent.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> when {
+                        !isLastInRow -> false                          // 行中: TVシステムに任せる
+                        index + 1 < totalCount -> { onWrapFocus(index + 1); true } // 次行先頭へ
+                        else -> true                                   // 最終アイテム: 何もしない
+                    }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> when {
+                        !isFirstInRow -> false                         // 行中: TVシステムに任せる
+                        index > 0 -> { onWrapFocus(index - 1); true } // 前行末尾へ
+                        else -> true                                   // 先頭アイテム: 何もしない
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        if (isInFirstRow) { onNavigateToSettings(); true } else false
+                    }
+                    else -> false
+                }
+            }
     ) {
         Box(
             modifier = Modifier

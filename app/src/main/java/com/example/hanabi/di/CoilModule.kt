@@ -30,7 +30,7 @@ object CoilModule {
         .diskCache {
             DiskCache.Builder()
                 .directory(context.cacheDir.resolve("thumbnail_cache"))
-                .maxSizePercent(0.05)
+                .maxSizeBytes(50L * 1024 * 1024)
                 .build()
         }
         .crossfade(true)
