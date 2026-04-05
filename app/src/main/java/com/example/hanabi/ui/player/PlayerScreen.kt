@@ -455,7 +455,6 @@ private fun PlayerControlsOverlay(
                 ) {
                     val barH = 4.dp.toPx()
                     val barTop = (size.height - barH) / 2
-                    val markerH = size.height  // チャプターマーカーはCanvas全高
 
                     // トラック背景
                     drawRect(
@@ -479,8 +478,8 @@ private fun PlayerControlsOverlay(
                             val x = size.width * (chapter.positionMs.toFloat() / durationMs)
                             drawRect(
                                 color = Color.Black.copy(alpha = 0.9f),
-                                topLeft = Offset(x - markerW / 2, 0f),
-                                size = size.copy(width = markerW, height = markerH)
+                                topLeft = Offset(x - markerW / 2, barTop),
+                                size = size.copy(width = markerW, height = barH)
                             )
                         }
                     }
