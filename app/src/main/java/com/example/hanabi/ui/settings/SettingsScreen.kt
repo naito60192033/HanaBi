@@ -1,6 +1,7 @@
 package com.example.hanabi.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -37,6 +38,7 @@ fun SettingsScreen(
     var share by remember { mutableStateOf(viewModel.currentShare) }
     var username by remember { mutableStateOf(viewModel.currentUsername) }
     var password by remember { mutableStateOf(viewModel.currentPassword) }
+    val saveButtonFocusRequester = remember { FocusRequester() }
 
     Box(
         modifier = Modifier
@@ -84,7 +86,8 @@ fun SettingsScreen(
                 value = password,
                 onValueChange = { password = it },
                 placeholder = "パスワード",
-                isPassword = true
+                isPassword = true,
+                nextFocusDown = saveButtonFocusRequester
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -92,7 +95,8 @@ fun SettingsScreen(
                     onClick = {
                         viewModel.save(host, share, username, password)
                         onBack()
-                    }
+                    },
+                    modifier = Modifier.focusRequester(saveButtonFocusRequester)
                 ) {
                     Text("保存して戻る")
                 }
@@ -111,9 +115,11 @@ private fun SettingsTextField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String = "",
-    isPassword: Boolean = false
+    isPassword: Boolean = false,
+    nextFocusDown: FocusRequester? = null
 ) {
     var isEditing by remember { mutableStateOf(false) }
+    var isFocused by remember { mutableStateOf(false) }
     val textFieldFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -132,6 +138,14 @@ private fun SettingsTextField(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .then(
+                    if (isFocused && !isEditing)
+                        Modifier.border(2.dp, Color.White, androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                    else
+                        Modifier
+                )
+                .onFocusChanged { state -> isFocused = state.hasFocus }
+                .focusProperties { if (nextFocusDown != null) down = nextFocusDown }
                 .focusable(!isEditing)
                 .onKeyEvent { event ->
                     if (!isEditing &&
