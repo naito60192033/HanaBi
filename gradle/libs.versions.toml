@@ -12,6 +12,7 @@ coil = "2.7.0"
 room = "2.6.1"
 navigation = "2.8.3"
 coroutines = "1.9.0"
+nanohttpd = "2.3.1"
 
 [libraries]
 # Compose BOM（バージョン一括管理）
@@ -58,6 +59,9 @@ navigation-compose = { group = "androidx.navigation", name = "navigation-compose
 
 # Coroutines
 coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+
+# NanoHTTPD (FLV用ローカルHTTPプロキシ)
+nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

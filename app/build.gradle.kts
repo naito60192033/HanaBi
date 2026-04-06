@@ -90,4 +90,7 @@ dependencies {
 
     // Coroutines
     implementation(libs.coroutines.android)
+
+    // NanoHTTPD (FLV用ローカルHTTPプロキシ)
+    implementation(libs.nanohttpd)
 }

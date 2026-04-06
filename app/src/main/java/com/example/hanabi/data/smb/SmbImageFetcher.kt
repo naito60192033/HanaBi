@@ -2,6 +2,7 @@ package com.example.hanabi.data.smb
 
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
+import android.util.Log
 import coil.ImageLoader
 import coil.decode.DataSource
 import coil.decode.ImageSource
@@ -51,7 +52,9 @@ class SmbImageFetcher(
         val cifsContext = config.buildCifsContext()
         val smbFile = SmbFile(rawPath, cifsContext)
 
-        val bytes = if (isVideoPath(rawPath)) {
+        val bytes = if (rawPath.lowercase().endsWith(".flv")) {
+            extractFlvFrame(smbFile)
+        } else if (isVideoPath(rawPath)) {
             extractVideoFrame(smbFile)
         } else {
             smbFile.openInputStream().use { it.readBytes() }
@@ -85,14 +88,35 @@ class SmbImageFetcher(
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLong() ?: 0L
             val positionUs = durationMs * 1000L * 15 / 100
             val bitmap = retriever.getFrameAtTime(positionUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                ?: error("フレーム抽出失敗: ${smbFile.name}")
+            bitmap ?: error("フレーム抽出失敗: ${smbFile.name}")
             return ByteArrayOutputStream().use { out ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
                 out.toByteArray()
             }
+        } catch (e: Exception) {
+            Log.e("SmbImageFetcher", "サムネイル取得失敗: ${smbFile.name}", e)
+            throw e
         } finally {
             retriever.release()
             mediaSource.close()
+        }
+    }
+
+    private suspend fun extractFlvFrame(smbFile: SmbFile): ByteArray {
+        val proxy = SmbHttpProxyServer(smbFile)
+        proxy.start()
+        try {
+            val bitmap = FlvFrameExtractor.extract(options.context, proxy.url)
+                ?: error("FLVフレーム抽出失敗: ${smbFile.name}")
+            return ByteArrayOutputStream().use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                out.toByteArray()
+            }
+        } catch (e: Exception) {
+            Log.e("SmbImageFetcher", "FLVサムネイル取得失敗: ${smbFile.name}", e)
+            throw e
+        } finally {
+            proxy.stop()
         }
     }
 
