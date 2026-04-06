@@ -43,6 +43,7 @@ fun UpdateScreen(
     BackHandler { onBack() }
 
     val updateState by viewModel.updateState.collectAsState()
+    val includeBeta by viewModel.includeBetaUpdates.collectAsState()
     val context = LocalContext.current
     val firstFocus = remember { FocusRequester() }
 
@@ -95,6 +96,19 @@ fun UpdateScreen(
 
             when (val state = updateState) {
                 is UpdateState.Idle -> {
+                    Button(
+                        onClick = { viewModel.setIncludeBetaUpdates(!includeBeta) },
+                        colors = ButtonDefaults.colors(
+                            containerColor = if (includeBeta) Color(0xFF1B5E20) else Color(0xFF2A2A2A),
+                            focusedContainerColor = if (includeBeta) Color(0xFF2E7D32) else Color(0xFF444444),
+                        )
+                    ) {
+                        Text(
+                            text = "ベータ版を含む: ${if (includeBeta) "ON" else "OFF"}",
+                            color = if (includeBeta) Color(0xFF81C784) else Color.Gray,
+                            fontSize = 14.sp
+                        )
+                    }
                     LaunchedEffect(Unit) { firstFocus.requestFocus() }
                     Button(
                         onClick = { viewModel.checkForUpdate() },

@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -110,22 +111,48 @@ class SettingsViewModel @Inject constructor(
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState
 
+    private val _includeBetaUpdates = MutableStateFlow(playbackPrefs.includeBetaUpdates)
+    val includeBetaUpdates: StateFlow<Boolean> = _includeBetaUpdates
+
+    fun setIncludeBetaUpdates(enabled: Boolean) {
+        _includeBetaUpdates.value = enabled
+        playbackPrefs.includeBetaUpdates = enabled
+    }
+
     fun checkForUpdate() {
         viewModelScope.launch(Dispatchers.IO) {
             _updateState.value = UpdateState.Checking
             try {
-                val url = URL("https://api.github.com/repos/naito60192033/HanaBi/releases/latest")
-                val connection = url.openConnection() as HttpURLConnection
-                connection.apply {
-                    setRequestProperty("Accept", "application/vnd.github.v3+json")
-                    connectTimeout = 10_000
-                    readTimeout = 10_000
+                val json: JSONObject = if (_includeBetaUpdates.value) {
+                    val url = URL("https://api.github.com/repos/naito60192033/HanaBi/releases")
+                    val connection = url.openConnection() as HttpURLConnection
+                    connection.apply {
+                        setRequestProperty("Accept", "application/vnd.github.v3+json")
+                        connectTimeout = 10_000
+                        readTimeout = 10_000
+                    }
+                    val response = connection.inputStream.bufferedReader().readText()
+                    connection.disconnect()
+                    // 先頭の非draftリリース（pre-release含む）を取得
+                    val array = JSONArray(response)
+                    (0 until array.length())
+                        .map { array.getJSONObject(it) }
+                        .firstOrNull { !it.getBoolean("draft") }
+                        ?: throw Exception("リリースが見つかりません")
+                } else {
+                    val url = URL("https://api.github.com/repos/naito60192033/HanaBi/releases/latest")
+                    val connection = url.openConnection() as HttpURLConnection
+                    connection.apply {
+                        setRequestProperty("Accept", "application/vnd.github.v3+json")
+                        connectTimeout = 10_000
+                        readTimeout = 10_000
+                    }
+                    val response = connection.inputStream.bufferedReader().readText()
+                    connection.disconnect()
+                    JSONObject(response)
                 }
-                val response = connection.inputStream.bufferedReader().readText()
-                connection.disconnect()
 
-                val json = JSONObject(response)
-                val tagName = json.getString("tag_name") // "v0.1.4"
+                val tagName = json.getString("tag_name")
                 val latestVersion = tagName.trimStart('v')
 
                 val assets = json.getJSONArray("assets")
@@ -180,15 +207,42 @@ class SettingsViewModel @Inject constructor(
         _updateState.value = UpdateState.Idle
     }
 
+    /**
+     * バージョン比較。pre-release suffix（例: -beta.1）を考慮する。
+     * - "0.3.0" > "0.3.0-beta.1"（正式版はpre-releaseより新しい）
+     * - "0.3.0-beta.2" > "0.3.0-beta.1"
+     */
     private fun isNewerVersion(latest: String, current: String): Boolean {
-        val l = latest.split(".").mapNotNull { it.toIntOrNull() }
-        val c = current.split(".").mapNotNull { it.toIntOrNull() }
-        for (i in 0 until maxOf(l.size, c.size)) {
-            val lv = l.getOrElse(i) { 0 }
-            val cv = c.getOrElse(i) { 0 }
+        val (latestBase, latestPre) = splitPreRelease(latest)
+        val (currentBase, currentPre) = splitPreRelease(current)
+
+        // ベースバージョン（major.minor.patch）を比較
+        for (i in 0 until maxOf(latestBase.size, currentBase.size)) {
+            val lv = latestBase.getOrElse(i) { 0 }
+            val cv = currentBase.getOrElse(i) { 0 }
             if (lv > cv) return true
             if (lv < cv) return false
         }
+
+        // ベースが同じ場合: 正式版 > pre-release
+        if (latestPre == null && currentPre != null) return true   // latest=正式, current=beta → 新しい
+        if (latestPre != null && currentPre == null) return false  // latest=beta, current=正式 → 古い
+
+        // 両方pre-releaseの場合: 末尾の番号で比較
+        if (latestPre != null && currentPre != null) {
+            val lNum = latestPre.split(".").lastOrNull()?.toIntOrNull() ?: 0
+            val cNum = currentPre.split(".").lastOrNull()?.toIntOrNull() ?: 0
+            return lNum > cNum
+        }
+
         return false
+    }
+
+    /** "0.3.0-beta.1" → Pair([0,3,0], "beta.1"), "0.3.0" → Pair([0,3,0], null) */
+    private fun splitPreRelease(version: String): Pair<List<Int>, String?> {
+        val parts = version.split("-", limit = 2)
+        val base = parts[0].split(".").mapNotNull { it.toIntOrNull() }
+        val pre = if (parts.size > 1) parts[1] else null
+        return base to pre
     }
 }
