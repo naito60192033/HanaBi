@@ -11,7 +11,10 @@ import jcifs.smb.SmbFile
 import jcifs.smb.SmbRandomAccessFile
 
 /** ExoPlayer が SMB ファイルを読み取るためのカスタム DataSource */
-class SmbDataSource(private val config: SmbConfig) : DataSource {
+class SmbDataSource(
+    private val config: SmbConfig,
+    private val pathOverride: () -> String?
+) : DataSource {
 
     private var randomAccessFile: SmbRandomAccessFile? = null
     private var uri: Uri? = null
@@ -22,7 +25,10 @@ class SmbDataSource(private val config: SmbConfig) : DataSource {
     override fun open(dataSpec: DataSpec): Long {
         uri = dataSpec.uri
         val cifsContext = config.buildCifsContext()
-        val smbFile = SmbFile(dataSpec.uri.toString(), cifsContext)
+        // ファイル名に `#` 等が含まれると URI 経由では fragment 扱いで切り落とされるため、
+        // PlayerViewModel が直接渡した生パスを優先して使用する。なければ URI からのデコードにフォールバック
+        val rawPath = pathOverride() ?: Uri.decode(dataSpec.uri.toString())
+        val smbFile = SmbFile(rawPath, cifsContext)
         val fileLength = smbFile.length()
         randomAccessFile = SmbRandomAccessFile(smbFile, "r")
         randomAccessFile!!.seek(dataSpec.position)
@@ -51,7 +57,14 @@ class SmbDataSource(private val config: SmbConfig) : DataSource {
         randomAccessFile = null
     }
 
+    /**
+     * Factory は currentSmbPath を保持し、PlayerViewModel.prepare() 時に更新される。
+     * これにより ExoPlayer 側の URI 加工に依存せず、確実に生パスを jcifs に渡せる。
+     */
     class Factory(private val config: SmbConfig) : DataSource.Factory {
-        override fun createDataSource(): DataSource = SmbDataSource(config)
+        @Volatile
+        var currentSmbPath: String? = null
+
+        override fun createDataSource(): DataSource = SmbDataSource(config) { currentSmbPath }
     }
 }

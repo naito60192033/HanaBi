@@ -3,6 +3,7 @@
 package com.example.hanabi.viewmodel
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.C
@@ -59,10 +60,13 @@ class PlayerViewModel @Inject constructor(
 
     private val delayProcessor = DelayAudioProcessor()
 
+    // SmbDataSource に直接生パスを渡すための Factory（PlayerViewModel から再生対象パスをセット）
+    private val smbDataSourceFactory = SmbDataSource.Factory(smbConfig)
+
     // ViewModel生成時に初期化（AndroidViewのfactoryより必ず先に存在する）
     val player: ExoPlayer = ExoPlayer.Builder(context)
         .setMediaSourceFactory(
-            ProgressiveMediaSource.Factory(SmbDataSource.Factory(smbConfig))
+            ProgressiveMediaSource.Factory(smbDataSourceFactory)
         )
         .setRenderersFactory(object : DefaultRenderersFactory(context) {
             override fun buildAudioSink(
@@ -182,10 +186,14 @@ class PlayerViewModel @Inject constructor(
         _audioDelayMs.value = 0L
         delayProcessor.setDelay(0L)
         _isPrepared.value = false
+        // SmbDataSource に渡す生パスを更新（# 等を含むファイル名で URI を介さず読み込めるようにする）
+        smbDataSourceFactory.currentSmbPath = smbPath
         viewModelScope.launch {
             val progress = playbackDao.getProgress(smbPath)
             _savedProgress.value = progress
-            player.setMediaItem(MediaItem.fromUri(smbPath))
+            // URI は ExoPlayer 内部の識別子用途。実ファイル読込みは smbDataSourceFactory 側で生パスを使う。
+            // それでも MediaItem 側で fragment 切り落としによる識別子衝突を避けるため path 部を percent-encode
+            player.setMediaItem(MediaItem.fromUri(encodeSmbUri(smbPath)))
             player.prepare()
             _isPrepared.value = true
         }
@@ -457,5 +465,17 @@ class PlayerViewModel @Inject constructor(
         saveProgress()
         player.release()
         super.onCleared()
+    }
+
+    /** smb:// URL の path 部のみを percent-encode する（`/` は保持） */
+    private fun encodeSmbUri(smbPath: String): Uri {
+        val prefix = "smb://"
+        if (!smbPath.startsWith(prefix)) return Uri.parse(smbPath)
+        val rest = smbPath.substring(prefix.length)
+        val slash = rest.indexOf('/')
+        if (slash < 0) return Uri.parse(smbPath)
+        val authority = rest.substring(0, slash)
+        val path = rest.substring(slash)
+        return Uri.parse("$prefix$authority${Uri.encode(path, "/")}")
     }
 }

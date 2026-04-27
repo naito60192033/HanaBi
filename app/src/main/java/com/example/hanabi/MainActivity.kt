@@ -1,5 +1,6 @@
 package com.example.hanabi
 
+import android.net.Uri
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
@@ -81,7 +82,7 @@ fun HanaBiNavHost() {
 
         // 動画プレイヤー画面
         composable("player/{smbPath}") { backStackEntry ->
-            val smbPath = backStackEntry.arguments?.getString("smbPath")?.decodeFromNav() ?: ""
+            val smbPath = backStackEntry.arguments?.getString("smbPath") ?: ""
             val browserEntry = remember(navController) { navController.getBackStackEntry("browser") }
             val browserVm: BrowserViewModel = hiltViewModel(browserEntry)
             PlayerScreen(
@@ -133,6 +134,11 @@ fun HanaBiNavHost() {
     }
 }
 
-/** ナビゲーション引数でスラッシュが使えるようにエンコード */
-private fun String.encodeForNav() = replace("/", "|")
-private fun String.decodeFromNav() = replace("|", "/")
+/**
+ * ナビゲーション引数として URL 安全な形にエンコードする。
+ * Compose Navigation はルート文字列を URI として解釈するため、
+ * 値に `/`（path 区切り）や `#`（fragment 区切り）を含むと欠落する。
+ * Uri.encode で全特殊文字を percent-encode することで安全に渡す。
+ * 受け取り側 (NavBackStackEntry.arguments) は自動 decode されるため復元処理は不要。
+ */
+private fun String.encodeForNav(): String = Uri.encode(this)
