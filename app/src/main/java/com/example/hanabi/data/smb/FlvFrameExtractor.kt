@@ -43,8 +43,12 @@ object FlvFrameExtractor {
     private val VERT = """
         attribute vec2 aPos;
         attribute vec2 aUV;
+        uniform mat4 uTexMatrix;
         varying vec2 vUV;
-        void main() { gl_Position = vec4(aPos, 0.0, 1.0); vUV = aUV; }
+        void main() {
+            gl_Position = vec4(aPos, 0.0, 1.0);
+            vUV = (uTexMatrix * vec4(aUV, 0.0, 1.0)).xy;
+        }
     """.trimIndent()
 
     // GL_OES_EGL_image_external: SurfaceTexture 由来の OES テクスチャをサンプリング
@@ -127,6 +131,8 @@ object FlvFrameExtractor {
                     val aPos = GLES20.glGetAttribLocation(prog, "aPos")
                     val aUV  = GLES20.glGetAttribLocation(prog, "aUV")
                     val uTex = GLES20.glGetUniformLocation(prog, "uTex")
+                    val uTexMatrix = GLES20.glGetUniformLocation(prog, "uTexMatrix")
+                    val texMatrix = FloatArray(16)
 
                     // --- FBO ---
                     val fboTex = IntArray(1).also {
@@ -146,20 +152,26 @@ object FlvFrameExtractor {
                     }[0]
 
                     // 頂点データ（フルスクリーンクワッド, TRIANGLE_STRIP）
-                    // UV の V 軸を反転して OpenGL の底辺起点と画像の上辺起点を合わせる
+                    // UV は標準範囲（0,0）-（1,1）。Y 軸反転やスケールは SurfaceTexture の
+                    // transformMatrix 経由で頂点シェーダ側に適用する
                     val posBuf = floatBuf(floatArrayOf(-1f,-1f,  1f,-1f, -1f,1f,  1f,1f))
-                    val uvBuf  = floatBuf(floatArrayOf( 0f, 1f,  1f, 1f,  0f,0f,  1f,0f))
+                    val uvBuf  = floatBuf(floatArrayOf( 0f, 0f,  1f, 0f,  0f,1f,  1f,1f))
 
                     // --- フレーム到着リスナー ---
                     st.setOnFrameAvailableListener({ _ ->
                         eglHandler.post {
                             if (done.get()) return@post
                             st.updateTexImage()
+                            // ハードウェアデコーダ依存のスケール/反転/オフセットを取得し頂点シェーダで適用する。
+                            // これを欠くと一部端末で OES テクスチャの左上 1/4 領域だけが有効になり、
+                            // 残りが未書き込み（緑背景）として描画される
+                            st.getTransformMatrix(texMatrix)
 
                             // OES テクスチャ → FBO に描画
                             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
                             GLES20.glViewport(0, 0, WIDTH, HEIGHT)
                             GLES20.glUseProgram(prog)
+                            GLES20.glUniformMatrix4fv(uTexMatrix, 1, false, texMatrix, 0)
                             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
                             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesId)
                             GLES20.glUniform1i(uTex, 0)

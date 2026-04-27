@@ -33,7 +33,8 @@ class SmbImageFetcher(
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult = withContext(Dispatchers.IO) {
-        val cacheKey = rawPath
+        // 動画サムネは抽出ロジック更新時にキャッシュを破棄するため version 接尾辞を付ける
+        val cacheKey = if (isVideoPath(rawPath)) "$rawPath#thumb_v2" else rawPath
 
         // ディスクキャッシュにヒットすれば即返す
         diskCache?.openSnapshot(cacheKey)?.use { snapshot ->
