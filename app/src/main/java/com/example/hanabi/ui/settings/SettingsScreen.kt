@@ -1,24 +1,36 @@
 package com.example.hanabi.ui.settings
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -38,6 +50,8 @@ fun SettingsScreen(
     var share by remember { mutableStateOf(viewModel.currentShare) }
     var username by remember { mutableStateOf(viewModel.currentUsername) }
     var password by remember { mutableStateOf(viewModel.currentPassword) }
+    var passwordVisible by remember { mutableStateOf(false) }
+    val passwordVisibilityFocusRequester = remember { FocusRequester() }
     val saveButtonFocusRequester = remember { FocusRequester() }
 
     Box(
@@ -87,6 +101,15 @@ fun SettingsScreen(
                 onValueChange = { password = it },
                 placeholder = "パスワード",
                 isPassword = true,
+                maskValue = !passwordVisible,
+                nextFocusDown = passwordVisibilityFocusRequester
+            )
+
+            // パスワード表示トグル
+            PasswordVisibilityToggle(
+                visible = passwordVisible,
+                onToggle = { passwordVisible = !passwordVisible },
+                focusRequester = passwordVisibilityFocusRequester,
                 nextFocusDown = saveButtonFocusRequester
             )
 
@@ -116,6 +139,7 @@ private fun SettingsTextField(
     onValueChange: (String) -> Unit,
     placeholder: String = "",
     isPassword: Boolean = false,
+    maskValue: Boolean = isPassword,
     nextFocusDown: FocusRequester? = null
 ) {
     var isEditing by remember { mutableStateOf(false) }
@@ -161,7 +185,7 @@ private fun SettingsTextField(
                 value = value,
                 onValueChange = onValueChange,
                 placeholder = { Text(placeholder, color = Color.DarkGray) },
-                visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+                visualTransformation = if (maskValue) PasswordVisualTransformation() else VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = if (isPassword) KeyboardType.Password else KeyboardType.Text
                 ),
@@ -183,5 +207,108 @@ private fun SettingsTextField(
                     }
             )
         }
+    }
+}
+
+/**
+ * パスワード表示/非表示を D-pad の決定キーで切り替える Material 3 風トグル。
+ * 左に Visibility/VisibilityOff アイコン + ラベル、右に pill 型スイッチを配置。
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PasswordVisibilityToggle(
+    visible: Boolean,
+    onToggle: () -> Unit,
+    focusRequester: FocusRequester,
+    nextFocusDown: FocusRequester? = null
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isFocused) 1.02f else 1f,
+        animationSpec = tween(150),
+        label = "scale"
+    )
+    val containerColor by animateColorAsState(
+        targetValue = when {
+            isFocused -> Color.White.copy(alpha = 0.16f)
+            else      -> Color.White.copy(alpha = 0.05f)
+        },
+        animationSpec = tween(150),
+        label = "container"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (isFocused) Color.White else Color.White.copy(alpha = 0.18f),
+        animationSpec = tween(150),
+        label = "border"
+    )
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(focusRequester)
+            .focusProperties { if (nextFocusDown != null) down = nextFocusDown }
+            .onFocusChanged { state -> isFocused = state.hasFocus }
+            .focusable()
+            .onKeyEvent { event ->
+                if (event.key == Key.DirectionCenter && event.type == KeyEventType.KeyDown) {
+                    onToggle(); true
+                } else false
+            }
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape(12.dp))
+            .background(containerColor)
+            .border(1.5.dp, borderColor, RoundedCornerShape(12.dp))
+            .padding(horizontal = 20.dp, vertical = 14.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Icon(
+                imageVector = if (visible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(22.dp)
+            )
+            Text(
+                text = "パスワードを表示",
+                color = Color.White,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        PillSwitch(checked = visible)
+    }
+}
+
+/** OS 設定アプリでよく見る pill 型スイッチ。視覚的フィードバック専用（フォーカスは親 Row が受ける） */
+@Composable
+private fun PillSwitch(checked: Boolean) {
+    val trackColor by animateColorAsState(
+        targetValue = if (checked) Color(0xFF60A5FA) else Color.White.copy(alpha = 0.28f),
+        animationSpec = tween(180),
+        label = "track"
+    )
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) 20.dp else 0.dp,
+        animationSpec = tween(180),
+        label = "thumb"
+    )
+    Box(
+        modifier = Modifier
+            .size(width = 46.dp, height = 24.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(trackColor)
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(3.dp)
+                .offset(x = thumbOffset)
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(Color.White)
+        )
     }
 }
