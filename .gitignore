@@ -29,3 +29,7 @@ tasks/
 
 # Gradle wrapper JAR（バイナリはコミット対象にする場合もあるが今回は除外）
 # gradle/wrapper/gradle-wrapper.jar
+
+# JVM クラッシュログ（Gradle/Kotlin デーモン OOM 等で生成される）
+hs_err_pid*.log
+replay_pid*.log
