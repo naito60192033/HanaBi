@@ -10,6 +10,9 @@ interface PlaybackDao {
     @Query("SELECT * FROM playback_progress WHERE smbPath = :path")
     suspend fun getProgress(path: String): PlaybackProgress?
 
+    @Query("SELECT * FROM playback_progress")
+    suspend fun getAllProgress(): List<PlaybackProgress>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveProgress(progress: PlaybackProgress)
 

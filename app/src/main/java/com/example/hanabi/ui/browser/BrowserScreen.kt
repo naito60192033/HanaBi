@@ -45,6 +45,7 @@ fun BrowserScreen(
     viewModel: BrowserViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val progressMap by viewModel.progressMap.collectAsState()
     val gridState = rememberLazyGridState()
     val focusRequester = remember { FocusRequester() }
     val settingsFocusRequester = remember { FocusRequester() }
@@ -184,6 +185,7 @@ fun BrowserScreen(
                             index = index,
                             columnCount = columnCount,
                             totalCount = state.entries.size,
+                            progress = progressMap[entry.path] ?: 0f,
                             modifier = when {
                                 index == viewModel.lastSelectedIndex -> Modifier.focusRequester(focusRequester)
                                 index == wrapTargetIndex -> Modifier.focusRequester(wrapFocusRequester)
@@ -215,6 +217,7 @@ private fun EntryCard(
     index: Int,
     columnCount: Int,
     totalCount: Int,
+    progress: Float,
     onClick: () -> Unit,
     onWrapFocus: (Int) -> Unit,
     onFocusSettings: () -> Unit,
@@ -256,7 +259,7 @@ private fun EntryCard(
             contentAlignment = Alignment.Center
         ) {
             if (!entry.isDirectory && entry.thumbnailPath != null) {
-                // 動画: サムネイル画像 + 下部に名前オーバーレイ
+                // 動画: サムネイル画像 + 下部に名前オーバーレイ + 視聴進捗バー
                 AsyncImage(
                     model = entry.thumbnailPath?.let { SmbThumbnailKey(it) },
                     contentDescription = null,
@@ -264,20 +267,41 @@ private fun EntryCard(
                     modifier = Modifier.fillMaxSize(),
                     error = rememberVectorPainter(Icons.Default.PlayArrow)
                 )
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomStart)
-                        .background(Color.Black.copy(alpha = 0.55f))
                 ) {
-                    Text(
-                        text = displayName(entry.name),
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Black.copy(alpha = 0.55f))
+                    ) {
+                        Text(
+                            text = displayName(entry.name),
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                    if (progress > 0f) {
+                        // YouTube風 視聴進捗バー（カード最下端）
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(3.dp)
+                                .background(Color.Black.copy(alpha = 0.5f))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(progress.coerceIn(0.01f, 1f))
+                                    .fillMaxHeight()
+                                    .background(Color(0xFFFF0000))
+                            )
+                        }
+                    }
                 }
             } else {
                 // フォルダ or サムネイルなし: アイコン表示

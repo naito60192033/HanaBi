@@ -2,6 +2,7 @@ package com.example.hanabi.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.hanabi.data.db.PlaybackDao
 import com.example.hanabi.data.smb.SmbConfig
 import com.example.hanabi.data.smb.SmbEntry
 import com.example.hanabi.data.smb.SmbRepository
@@ -22,11 +23,16 @@ sealed class BrowserUiState {
 @HiltViewModel
 class BrowserViewModel @Inject constructor(
     private val repository: SmbRepository,
-    private val config: SmbConfig
+    private val config: SmbConfig,
+    private val playbackDao: PlaybackDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<BrowserUiState>(BrowserUiState.Loading)
     val uiState: StateFlow<BrowserUiState> = _uiState
+
+    /** 各動画の視聴進捗 (smbPath -> 0.0〜1.0)。サムネイル下部のバー表示用 */
+    private val _progressMap = MutableStateFlow<Map<String, Float>>(emptyMap())
+    val progressMap: StateFlow<Map<String, Float>> = _progressMap
 
     // 階層ナビゲーション用のパス履歴スタック
     private val pathStack = ArrayDeque<String>()
@@ -68,6 +74,8 @@ class BrowserViewModel @Inject constructor(
             if (_uiState.value !is BrowserUiState.Success) {
                 _uiState.value = BrowserUiState.Loading
             }
+            // 視聴進捗もあわせて再読込（プレイヤーから戻ってきた直後にも反映する）
+            loadProgress()
             repository.listEntries(currentPath)
                 .onSuccess { entries ->
                     // フォルダと動画ファイルのみ表示
@@ -84,6 +92,16 @@ class BrowserViewModel @Inject constructor(
                     _uiState.value = BrowserUiState.Error(e.message ?: "不明なエラー")
                 }
         }
+    }
+
+    /** DB から全動画の進捗を読み込んで progressMap を更新する */
+    private suspend fun loadProgress() {
+        val all = playbackDao.getAllProgress()
+        _progressMap.value = all.mapNotNull { p ->
+            if (p.durationMs <= 0) return@mapNotNull null
+            val ratio = (p.positionMs.toFloat() / p.durationMs).coerceIn(0f, 1f)
+            p.smbPath to ratio
+        }.toMap()
     }
 
     /** フォルダを開く */
