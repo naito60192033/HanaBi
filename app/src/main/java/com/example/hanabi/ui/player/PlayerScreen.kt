@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
@@ -53,6 +54,12 @@ private data class ChapterJumpEvent(
     val forward: Boolean,
     val isChapter: Boolean,
     val chapterName: String?,
+    val id: Long = System.currentTimeMillis()
+)
+
+/** 再生/一時停止トグル表示イベント */
+private data class PlayPauseEvent(
+    val isPlaying: Boolean,
     val id: Long = System.currentTimeMillis()
 )
 
@@ -124,6 +131,8 @@ fun PlayerScreen(
     val accumulator = remember { SeekAccumulator() }
     val showSettingsOverlay = remember { mutableStateOf(false) }
     val chapterJumpEvent = remember { mutableStateOf<ChapterJumpEvent?>(null) }
+    val playPauseEvent = remember { mutableStateOf<PlayPauseEvent?>(null) }
+    val playPauseVisible = remember { mutableStateOf(false) }
 
     // コントローラー表示管理
     val showController = remember { mutableStateOf(false) }
@@ -137,6 +146,10 @@ fun PlayerScreen(
     val shouldShowResumeDialog = isPrepared && savedProgress != null &&
         !savedProgress!!.isFinished && savedProgress!!.positionMs > 30_000
     SideEffect { showResumeDialog.value = shouldShowResumeDialog }
+
+    // 次エピソードバナー表示中かを playerKeyHandler から参照するための状態
+    val showNextEpisodeBannerState = remember { mutableStateOf(false) }
+    SideEffect { showNextEpisodeBannerState.value = showNextEpisodeBanner }
 
     // コントローラー自動非表示（再生中は3秒後に隠す）
     LaunchedEffect(lastKeyPressTime.longValue) {
@@ -153,14 +166,27 @@ fun PlayerScreen(
         }
     }
 
+    // 再生/一時停止トグル時に中央オーバーレイを一瞬表示（YouTube 風）
+    var lastPlayingTracked by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(isActuallyPlaying, playbackInitiated) {
+        if (!playbackInitiated) return@LaunchedEffect
+        val prev = lastPlayingTracked
+        lastPlayingTracked = isActuallyPlaying
+        if (prev == null || prev == isActuallyPlaying) return@LaunchedEffect
+        if (shouldShowResumeDialog || showNextEpisodeBanner) return@LaunchedEffect
+        playPauseEvent.value = PlayPauseEvent(isActuallyPlaying)
+        playPauseVisible.value = true
+    }
+
     // ---------------------------------------------------------------
     // Activity 最上位でキーを捕捉
     // ---------------------------------------------------------------
     DisposableEffect(Unit) {
-        MainActivity.playerKeyHandler = { event ->
+        val handler: (KeyEvent) -> Boolean = { event ->
             if (event.action == KeyEvent.ACTION_DOWN) {
                 when {
                     showResumeDialog.value -> false
+                    showNextEpisodeBannerState.value -> false
                     showSettingsOverlay.value -> {
                         when (event.keyCode) {
                             KeyEvent.KEYCODE_MENU -> {
@@ -236,8 +262,15 @@ fun PlayerScreen(
                 }
             } else false
         }
+        MainActivity.playerKeyHandler = handler
         onDispose {
-            MainActivity.playerKeyHandler = null
+            // 自動次再生で popUpTo + navigate した際は、新しい PlayerScreen の
+            // DisposableEffect が先に走ってからこの onDispose が実行される。
+            // 既に新しいハンドラに差し替わっている場合は何もしない（さもないと
+            // 新しい画面で十字キー・決定が効かなくなる）。
+            if (MainActivity.playerKeyHandler === handler) {
+                MainActivity.playerKeyHandler = null
+            }
         }
     }
 
@@ -254,11 +287,14 @@ fun PlayerScreen(
     }
 
     BackHandler {
-        if (showSettingsOverlay.value) {
-            showSettingsOverlay.value = false
-        } else {
-            viewModel.saveProgress()
-            onBack()
+        when {
+            showSettingsOverlay.value -> showSettingsOverlay.value = false
+            showNextEpisodeBanner -> viewModel.dismissNextEpisodeBanner()
+            showController.value && isActuallyPlaying -> showController.value = false
+            else -> {
+                viewModel.saveProgress()
+                onBack()
+            }
         }
     }
 
@@ -346,6 +382,20 @@ fun PlayerScreen(
                 ChapterJumpIndicator(
                     event = event,
                     onDismiss = { chapterJumpEvent.value = null }
+                )
+            }
+        }
+
+        // 再生/一時停止トグルインジケーター
+        AnimatedVisibility(
+            visible = playPauseVisible.value,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            playPauseEvent.value?.let { event ->
+                PlayPauseIndicator(
+                    event = event,
+                    onDismiss = { playPauseVisible.value = false }
                 )
             }
         }
@@ -525,6 +575,34 @@ private fun PlayerControlsOverlay(
                     }
                 }
             }
+        }
+    }
+}
+
+/** 再生/一時停止トグルインジケーター（中央に円形オーバーレイ） */
+@Composable
+private fun PlayPauseIndicator(event: PlayPauseEvent, onDismiss: () -> Unit) {
+    LaunchedEffect(event.id) {
+        delay(700)
+        onDismiss()
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .background(Color.Black.copy(alpha = 0.55f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (event.isPlaying) "▶" else "❚❚",
+                fontSize = 40.sp,
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
