@@ -197,11 +197,7 @@ fun PlayerScreen(
                         }
                     }
                     else -> {
-                        // キー操作でコントローラーを表示
-                        lastKeyPressTime.longValue = System.currentTimeMillis()
-                        showController.value = true
-
-                        when (event.keyCode) {
+                        val handled = when (event.keyCode) {
                             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                                 viewModel.seekForward()
                                 val total = accumulator.accumulate(
@@ -258,6 +254,15 @@ fun PlayerScreen(
                             }
                             else -> false
                         }
+                        // 自分が処理したキーのときだけコントローラーを表示する。
+                        // BACK 等のここで処理しないキーで showController を true にすると、
+                        // BackHandler 側の判定（コントローラー表示中なら閉じるだけ）と競合して
+                        // 「再生中の戻るボタンで前画面に戻れない」現象になる。
+                        if (handled) {
+                            lastKeyPressTime.longValue = System.currentTimeMillis()
+                            showController.value = true
+                        }
+                        handled
                     }
                 }
             } else false
