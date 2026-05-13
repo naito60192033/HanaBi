@@ -6,6 +6,10 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** カタカナをひらがなに正規化（U+30A1〜U+30F6 → U+3041〜U+3096）してかな混在ソートを実現 */
+private fun Char.normalizeKana(): Char =
+    if (this in 'ァ'..'ヶ') (this.code - 0x60).toChar() else this
+
 /** 数字部分を数値として比較する自然順ソート用コンパレータ（ファイル名比較に使用） */
 internal val naturalStringComparator: Comparator<String> = Comparator { a, b ->
     val aLower = a.lowercase()
@@ -21,7 +25,7 @@ internal val naturalStringComparator: Comparator<String> = Comparator { a, b ->
             while (j < bLower.length && bLower[j].isDigit()) numB = numB * 10 + (bLower[j++] - '0')
             result = numA.compareTo(numB)
         } else {
-            result = aLower[i].compareTo(bLower[j])
+            result = aLower[i].normalizeKana().compareTo(bLower[j].normalizeKana())
             i++; j++
         }
     }
