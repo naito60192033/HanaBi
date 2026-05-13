@@ -14,8 +14,8 @@ android {
         applicationId = "com.example.hanabi"
         minSdk = 25        // Fire TV Stick 4K (Fire OS 7)
         targetSdk = 35
-        versionCode = 15
-        versionName = "0.3.0-beta.5"
+        versionCode = 16
+        versionName = "0.3.0-beta.6"
     }
 
     buildTypes {
