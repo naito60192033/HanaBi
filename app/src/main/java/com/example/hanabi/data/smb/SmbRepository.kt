@@ -2,9 +2,17 @@ package com.example.hanabi.data.smb
 
 import jcifs.smb.SmbFile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** フォルダのサムネとして使う画像ファイル名（拡張子を含む小文字） */
+private val FOLDER_THUMBNAIL_NAMES = setOf(
+    "thumbnail.jpg", "thumbnail.jpeg", "thumbnail.png", "thumbnail.webp"
+)
 
 /** カタカナをひらがなに正規化（U+30A1〜U+30F6 → U+3041〜U+3096）してかな混在ソートを実現 */
 private fun Char.normalizeKana(): Char =
@@ -47,7 +55,7 @@ class SmbRepository @Inject constructor(
             val url = config.buildUrl(path)
             val smbFile = SmbFile(url, cifsContext)
 
-            smbFile.listFiles()
+            val entries = smbFile.listFiles()
                 ?.map { file ->
                     val fileName = file.name.trimEnd('/')
                     val filePath = file.canonicalPath
@@ -64,12 +72,37 @@ class SmbRepository @Inject constructor(
                     // 隠しファイル・システムフォルダは除外
                     !entry.name.startsWith(".") && entry.name != "@eaDir"
                 }
-                ?.sortedWith(
-                    // フォルダ優先、同種は自然順ソート（数字を数値として比較）
-                    compareByDescending<SmbEntry> { it.isDirectory }
-                        .then(Comparator { a, b -> naturalStringComparator.compare(a.name, b.name) })
-                )
-                ?: emptyList()
+                ?: return@runCatching emptyList()
+
+            // フォルダ直下の thumbnail.{jpg,png,...} を並列に検索し、見つかればサムネに設定
+            val withFolderThumbs = coroutineScope {
+                entries.map { entry ->
+                    async {
+                        if (entry.isDirectory) {
+                            val thumbPath = findFolderThumbnail(entry.path, cifsContext)
+                            if (thumbPath != null) entry.copy(thumbnailPath = thumbPath) else entry
+                        } else entry
+                    }
+                }.awaitAll()
+            }
+
+            withFolderThumbs.sortedWith(
+                // フォルダ優先、同種は自然順ソート（数字を数値として比較）
+                compareByDescending<SmbEntry> { it.isDirectory }
+                    .then(Comparator { a, b -> naturalStringComparator.compare(a.name, b.name) })
+            )
+        }
+    }
+
+    /** フォルダ直下に thumbnail.{jpg,jpeg,png,webp} があればその SMB URL を返す */
+    private fun findFolderThumbnail(folderPath: String, cifsContext: jcifs.CIFSContext): String? {
+        return try {
+            val folder = SmbFile(if (folderPath.endsWith("/")) folderPath else "$folderPath/", cifsContext)
+            folder.listFiles()
+                ?.firstOrNull { it.name.trimEnd('/').lowercase() in FOLDER_THUMBNAIL_NAMES }
+                ?.canonicalPath
+        } catch (_: Exception) {
+            null
         }
     }
 

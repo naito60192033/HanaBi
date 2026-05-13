@@ -258,14 +258,16 @@ private fun EntryCard(
                 .background(if (entry.isDirectory) Color(0xFF1A237E) else Color(0xFF1B5E20)),
             contentAlignment = Alignment.Center
         ) {
-            if (!entry.isDirectory && entry.thumbnailPath != null) {
-                // 動画: サムネイル画像 + 下部に名前オーバーレイ + 視聴進捗バー
+            if (entry.thumbnailPath != null) {
+                // 動画 or サムネ付きフォルダ: サムネイル画像 + 下部に名前オーバーレイ + 視聴進捗バー（動画のみ）
                 AsyncImage(
                     model = entry.thumbnailPath?.let { SmbThumbnailKey(it) },
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                    contentScale = if (entry.isDirectory) ContentScale.Fit else ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                    error = rememberVectorPainter(Icons.Default.PlayArrow)
+                    error = rememberVectorPainter(
+                        if (entry.isDirectory) Icons.Default.Folder else Icons.Default.PlayArrow
+                    )
                 )
                 Column(
                     modifier = Modifier
@@ -275,7 +277,10 @@ private fun EntryCard(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color.Black.copy(alpha = 0.55f))
+                            .background(
+                                if (entry.isDirectory) Color(0xFF1A237E).copy(alpha = 0.85f)
+                                else Color.Black.copy(alpha = 0.55f)
+                            )
                     ) {
                         Text(
                             text = displayName(entry.name),
@@ -286,7 +291,7 @@ private fun EntryCard(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
-                    if (progress > 0f) {
+                    if (!entry.isDirectory && progress > 0f) {
                         // YouTube風 視聴進捗バー（カード最下端）
                         Box(
                             modifier = Modifier
