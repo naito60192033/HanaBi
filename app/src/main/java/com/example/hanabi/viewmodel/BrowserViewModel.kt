@@ -1,5 +1,6 @@
 package com.example.hanabi.viewmodel
 
+import com.example.hanabi.data.smb.relativePathOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.hanabi.data.db.PlaybackDao
@@ -110,7 +111,7 @@ class BrowserViewModel @Inject constructor(
         // 現在の選択インデックスを保存してからフォルダに入る
         selectedIndexStack.addLast(lastSelectedIndex)
         lastSelectedIndex = 0
-        val relativePath = extractRelativePath(entry.path)
+        val relativePath = relativePathOf(entry.path)
         pathStack.addLast(relativePath)
         loadCurrentPath()
     }
@@ -123,13 +124,5 @@ class BrowserViewModel @Inject constructor(
         lastSelectedIndex = selectedIndexStack.removeLastOrNull() ?: 0
         loadCurrentPath()
         return true
-    }
-
-    /** SMB URLから共有フォルダ以下のパスを抽出 */
-    private fun extractRelativePath(smbUrl: String): String {
-        val share = config.share
-        val idx = smbUrl.indexOf(share)
-        if (idx == -1) return ""
-        return smbUrl.substring(idx + share.length).trimStart('/')
     }
 }

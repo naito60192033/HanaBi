@@ -112,12 +112,10 @@ class SmbRepository @Inject constructor(
      */
     suspend fun findNextEpisode(currentSmbUrl: String): SmbEntry? = withContext(Dispatchers.IO) {
         runCatching {
-            // SMB URL 例: smb://host/share/Series/S01/ep01.mp4
-            val share = config.share
-            // share 以降のパスを抽出: "Series/S01/ep01.mp4"
-            val afterShare = currentSmbUrl.substringAfter("/$share/", "")
-            val dirPath = afterShare.substringBeforeLast("/", "")
-            val currentFileName = afterShare.substringAfterLast("/")
+            // SMB URL 例: smb://host/share/Series/S01/ep01.mp4 → "Series/S01/ep01.mp4"
+            val relative = relativePathOf(currentSmbUrl)
+            val dirPath = parentDirOf(relative)
+            val currentFileName = fileNameOf(relative)
 
             val entries = listEntries(dirPath).getOrElse { return@runCatching null }
             val videoFiles = entries
