@@ -27,8 +27,8 @@ CLAUDE.md
 # タスク管理（ローカル管理のみ）
 tasks/
 
-# Gradle wrapper JAR（バイナリはコミット対象にする場合もあるが今回は除外）
-# gradle/wrapper/gradle-wrapper.jar
+# Gradle wrapper JAR はコミット対象（上の *.jar の例外）
+!gradle/wrapper/gradle-wrapper.jar
 
 # JVM クラッシュログ（Gradle/Kotlin デーモン OOM 等で生成される）
 hs_err_pid*.log
