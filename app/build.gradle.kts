@@ -120,4 +120,7 @@ dependencies {
 
     // NanoHTTPD (FLV用ローカルHTTPプロキシ)
     implementation(libs.nanohttpd)
+
+    // ユニットテスト (JVM)
+    testImplementation(libs.junit)
 }

@@ -13,6 +13,7 @@ room = "2.6.1"
 navigation = "2.8.3"
 coroutines = "1.9.0"
 nanohttpd = "2.3.1"
+junit = "4.13.2"
 
 [libraries]
 # Compose BOM（バージョン一括管理）
@@ -62,6 +63,9 @@ coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutin
 
 # NanoHTTPD (FLV用ローカルHTTPプロキシ)
 nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
+
+# ユニットテスト (JVM)
+junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

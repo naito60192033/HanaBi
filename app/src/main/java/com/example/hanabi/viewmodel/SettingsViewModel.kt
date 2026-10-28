@@ -206,43 +206,43 @@ class SettingsViewModel @Inject constructor(
     fun resetUpdateState() {
         _updateState.value = UpdateState.Idle
     }
+}
 
-    /**
-     * バージョン比較。pre-release suffix（例: -beta.1）を考慮する。
-     * - "0.3.0" > "0.3.0-beta.1"（正式版はpre-releaseより新しい）
-     * - "0.3.0-beta.2" > "0.3.0-beta.1"
-     */
-    private fun isNewerVersion(latest: String, current: String): Boolean {
-        val (latestBase, latestPre) = splitPreRelease(latest)
-        val (currentBase, currentPre) = splitPreRelease(current)
+/**
+ * バージョン比較。pre-release suffix（例: -beta.1）を考慮する。
+ * - "0.3.0" > "0.3.0-beta.1"（正式版はpre-releaseより新しい）
+ * - "0.3.0-beta.2" > "0.3.0-beta.1"
+ */
+internal fun isNewerVersion(latest: String, current: String): Boolean {
+    val (latestBase, latestPre) = splitPreRelease(latest)
+    val (currentBase, currentPre) = splitPreRelease(current)
 
-        // ベースバージョン（major.minor.patch）を比較
-        for (i in 0 until maxOf(latestBase.size, currentBase.size)) {
-            val lv = latestBase.getOrElse(i) { 0 }
-            val cv = currentBase.getOrElse(i) { 0 }
-            if (lv > cv) return true
-            if (lv < cv) return false
-        }
-
-        // ベースが同じ場合: 正式版 > pre-release
-        if (latestPre == null && currentPre != null) return true   // latest=正式, current=beta → 新しい
-        if (latestPre != null && currentPre == null) return false  // latest=beta, current=正式 → 古い
-
-        // 両方pre-releaseの場合: 末尾の番号で比較
-        if (latestPre != null && currentPre != null) {
-            val lNum = latestPre.split(".").lastOrNull()?.toIntOrNull() ?: 0
-            val cNum = currentPre.split(".").lastOrNull()?.toIntOrNull() ?: 0
-            return lNum > cNum
-        }
-
-        return false
+    // ベースバージョン（major.minor.patch）を比較
+    for (i in 0 until maxOf(latestBase.size, currentBase.size)) {
+        val lv = latestBase.getOrElse(i) { 0 }
+        val cv = currentBase.getOrElse(i) { 0 }
+        if (lv > cv) return true
+        if (lv < cv) return false
     }
 
-    /** "0.3.0-beta.1" → Pair([0,3,0], "beta.1"), "0.3.0" → Pair([0,3,0], null) */
-    private fun splitPreRelease(version: String): Pair<List<Int>, String?> {
-        val parts = version.split("-", limit = 2)
-        val base = parts[0].split(".").mapNotNull { it.toIntOrNull() }
-        val pre = if (parts.size > 1) parts[1] else null
-        return base to pre
+    // ベースが同じ場合: 正式版 > pre-release
+    if (latestPre == null && currentPre != null) return true   // latest=正式, current=beta → 新しい
+    if (latestPre != null && currentPre == null) return false  // latest=beta, current=正式 → 古い
+
+    // 両方pre-releaseの場合: 末尾の番号で比較
+    if (latestPre != null && currentPre != null) {
+        val lNum = latestPre.split(".").lastOrNull()?.toIntOrNull() ?: 0
+        val cNum = currentPre.split(".").lastOrNull()?.toIntOrNull() ?: 0
+        return lNum > cNum
     }
+
+    return false
+}
+
+/** "0.3.0-beta.1" → Pair([0,3,0], "beta.1"), "0.3.0" → Pair([0,3,0], null) */
+internal fun splitPreRelease(version: String): Pair<List<Int>, String?> {
+    val parts = version.split("-", limit = 2)
+    val base = parts[0].split(".").mapNotNull { it.toIntOrNull() }
+    val pre = if (parts.size > 1) parts[1] else null
+    return base to pre
 }

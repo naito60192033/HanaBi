@@ -336,7 +336,7 @@ private fun EntryCard(
 }
 
 /** 現在のパスからヘッダータイトルを生成 */
-private fun buildHeaderTitle(path: String): String {
+internal fun buildHeaderTitle(path: String): String {
     if (path.isBlank()) return "HanaBi"
     val parts = path.split("/").filter { it.isNotBlank() }
     val last = parts.lastOrNull() ?: return "HanaBi"
@@ -352,6 +352,6 @@ private fun buildHeaderTitle(path: String): String {
  *  `タイトル_SxxExx_エピソード名.mp4` 形式の場合はエピソード名のみ抽出 */
 private val episodeRegex = Regex("""^.+_S\d+E\d+_(.+)\.[^.]+$""")
 
-private fun displayName(name: String): String {
+internal fun displayName(name: String): String {
     return episodeRegex.find(name)?.groupValues?.get(1) ?: name
 }
