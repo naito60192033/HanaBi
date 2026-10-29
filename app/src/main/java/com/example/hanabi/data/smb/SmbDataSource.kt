@@ -9,11 +9,12 @@ import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
 import jcifs.smb.SmbFile
 import jcifs.smb.SmbRandomAccessFile
+import java.util.concurrent.ConcurrentHashMap
 
 /** ExoPlayer が SMB ファイルを読み取るためのカスタム DataSource */
 class SmbDataSource(
     private val config: SmbConfig,
-    private val pathOverride: () -> String?
+    private val pathOverride: (String) -> String?
 ) : DataSource {
 
     private var randomAccessFile: SmbRandomAccessFile? = null
@@ -26,8 +27,9 @@ class SmbDataSource(
         uri = dataSpec.uri
         val cifsContext = config.buildCifsContext()
         // ファイル名に `#` 等が含まれると URI 経由では fragment 扱いで切り落とされるため、
-        // PlayerViewModel が直接渡した生パスを優先して使用する。なければ URI からのデコードにフォールバック
-        val rawPath = pathOverride() ?: Uri.decode(dataSpec.uri.toString())
+        // PlayerViewModel が登録した「URI 文字列 → 生パス」対応表を優先して使用する。なければ URI からのデコードにフォールバック
+        val uriString = dataSpec.uri.toString()
+        val rawPath = pathOverride(uriString) ?: Uri.decode(uriString)
         val smbFile = SmbFile(rawPath, cifsContext)
         val fileLength = smbFile.length()
         randomAccessFile = SmbRandomAccessFile(smbFile, "r")
@@ -58,13 +60,17 @@ class SmbDataSource(
     }
 
     /**
-     * Factory は currentSmbPath を保持し、PlayerViewModel.prepare() 時に更新される。
+     * Factory は「URI 文字列 → 生パス」の対応表を保持し、PlayerViewModel.prepare() 時に登録される。
      * これにより ExoPlayer 側の URI 加工に依存せず、確実に生パスを jcifs に渡せる。
      */
     class Factory(private val config: SmbConfig) : DataSource.Factory {
-        @Volatile
-        var currentSmbPath: String? = null
+        private val rawPaths = ConcurrentHashMap<String, String>()
 
-        override fun createDataSource(): DataSource = SmbDataSource(config) { currentSmbPath }
+        /** MediaItem の URI 文字列に対応する生パスを登録する */
+        fun registerRawPath(uriString: String, rawPath: String) {
+            rawPaths[uriString] = rawPath
+        }
+
+        override fun createDataSource(): DataSource = SmbDataSource(config) { rawPaths[it] }
     }
 }

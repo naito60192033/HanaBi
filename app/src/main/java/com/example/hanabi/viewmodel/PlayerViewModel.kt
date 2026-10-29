@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -30,6 +31,7 @@ import com.example.hanabi.player.Mp4ChapterExtractor
 import jcifs.smb.SmbFile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -138,6 +140,16 @@ class PlayerViewModel @Inject constructor(
 
     private var currentSmbPath: String = ""
 
+    /** 再生エラー時の利用者向けメッセージ（null=エラーなし） */
+    private val _playerError = MutableStateFlow<String?>(null)
+    val playerError: StateFlow<String?> = _playerError
+
+    /** 直前の有効な再生位置（エラー後の再試行用。エラー時に 0 等で上書きしない） */
+    private var lastValidPositionMs: Long = 0L
+
+    private var positionJob: Job? = null
+    private var progressSaveJob: Job? = null
+
     init {
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -152,6 +164,30 @@ class PlayerViewModel @Inject constructor(
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _isActuallyPlaying.value = isPlaying
+                if (isPlaying) {
+                    startPositionPolling()
+                } else {
+                    positionJob?.cancel()
+                    positionJob = null
+                    // 停止した時点の位置を一度反映する
+                    updatePosition()
+                }
+            }
+
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                // 停止中のシークでも表示を更新する
+                updatePosition()
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                // 位置が 0 等になっている可能性があるため、有効な値のときだけ更新し saveProgress は呼ばない
+                val pos = player.currentPosition
+                if (pos > 0) lastValidPositionMs = pos
+                _playerError.value = errorMessageOf(error)
             }
 
             override fun onTracksChanged(tracks: Tracks) {
@@ -162,15 +198,78 @@ class PlayerViewModel @Inject constructor(
         player.setPlaybackSpeed(playbackPrefs.playbackSpeed)
         // 保存済み音声言語を適用
         applyPersistedTrackPreferences()
-        // 再生位置を定期ポーリング（500ms間隔）
-        viewModelScope.launch {
+    }
+
+    /** 再生位置を反映する */
+    private fun updatePosition() {
+        val pos = player.currentPosition.coerceAtLeast(0L)
+        _currentPositionMs.value = pos
+        if (_playerError.value == null && pos > 0) lastValidPositionMs = pos
+        val dur = player.duration
+        if (dur > 0) _durationMs.value = dur
+    }
+
+    /** 再生中のみ位置を定期ポーリング（500ms間隔） */
+    private fun startPositionPolling() {
+        positionJob?.cancel()
+        positionJob = viewModelScope.launch {
             while (true) {
-                _currentPositionMs.value = player.currentPosition.coerceAtLeast(0L)
-                val dur = player.duration
-                if (dur > 0) _durationMs.value = dur
+                updatePosition()
                 delay(500)
             }
         }
+    }
+
+    /** PlaybackException を利用者向けメッセージに分類する */
+    private fun errorMessageOf(error: PlaybackException): String = when (error.errorCode) {
+        PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+        PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
+        PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+        PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
+        PlaybackException.ERROR_CODE_IO_NO_PERMISSION,
+        PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED,
+        PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE ->
+            "NASとの接続が切れました"
+        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+        PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+        PlaybackException.ERROR_CODE_DECODING_FAILED,
+        PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+        PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED ->
+            "この動画形式は再生できません"
+        else -> "再生中にエラーが発生しました (${error.errorCodeName})"
+    }
+
+    /**
+     * エラー後の再試行：直前の位置から prepare し直す。
+     * @param resume true なら再生を再開する（再生開始前のエラーでは false にして開始判断を UI に戻す）
+     */
+    fun retryPlayback(resume: Boolean) {
+        _playerError.value = null
+        player.seekTo(lastValidPositionMs)
+        player.prepare()
+        if (resume) player.play()
+    }
+
+    /** バックグラウンド遷移時：一時停止して位置を保存（復帰時の自動再開はしない） */
+    fun onAppBackground() {
+        player.pause()
+        saveProgress()
+    }
+
+    /** 再生（一時停止中のみ） */
+    fun play() {
+        if (!player.isPlaying) player.play()
+    }
+
+    /** 一時停止（再生中のみ） */
+    fun pause() {
+        if (player.isPlaying) player.pause()
     }
 
     /** メディアをセットして準備する（再生はまだ開始しない） */
@@ -186,14 +285,17 @@ class PlayerViewModel @Inject constructor(
         _audioDelayMs.value = 0L
         delayProcessor.setDelay(0L)
         _isPrepared.value = false
-        // SmbDataSource に渡す生パスを更新（# 等を含むファイル名で URI を介さず読み込めるようにする）
-        smbDataSourceFactory.currentSmbPath = smbPath
+        _playerError.value = null
+        lastValidPositionMs = 0L
+        // SmbDataSource に渡す生パスを登録（# 等を含むファイル名で URI を介さず読み込めるようにする）
+        val mediaUri = encodeSmbUri(smbPath)
+        smbDataSourceFactory.registerRawPath(mediaUri.toString(), smbPath)
         viewModelScope.launch {
             val progress = playbackDao.getProgress(smbPath)
             _savedProgress.value = progress
             // URI は ExoPlayer 内部の識別子用途。実ファイル読込みは smbDataSourceFactory 側で生パスを使う。
             // それでも MediaItem 側で fragment 切り落としによる識別子衝突を避けるため path 部を percent-encode
-            player.setMediaItem(MediaItem.fromUri(encodeSmbUri(smbPath)))
+            player.setMediaItem(MediaItem.fromUri(mediaUri))
             player.prepare()
             _isPrepared.value = true
         }
@@ -370,6 +472,8 @@ class PlayerViewModel @Inject constructor(
     /** 現在の再生位置を保存 */
     fun saveProgress() {
         if (currentSmbPath.isBlank()) return
+        // エラー中は位置が 0 等で上書きされうるため保存しない
+        if (_playerError.value != null) return
         val position = player.currentPosition
         val duration = player.duration.takeIf { it > 0 } ?: return
 
@@ -386,10 +490,11 @@ class PlayerViewModel @Inject constructor(
 
     /** 再生位置を定期的に保存する（30秒ごと） */
     private fun startProgressSaving() {
-        viewModelScope.launch {
+        progressSaveJob?.cancel()
+        progressSaveJob = viewModelScope.launch {
             while (true) {
                 delay(30_000)
-                saveProgress()
+                if (player.isPlaying) saveProgress()
             }
         }
     }
