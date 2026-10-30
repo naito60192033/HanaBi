@@ -5,6 +5,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -45,8 +48,14 @@ internal val naturalStringComparator: Comparator<String> = Comparator { a, b ->
 class SmbRepository @Inject constructor(
     private val config: SmbConfig
 ) {
+    /** フォルダサムネ探索結果のキャッシュ値（ConcurrentHashMap は null 値不可のため包む。key=null は「なし」） */
+    private class FolderThumb(val key: SmbThumbnailKey?)
+
+    private val folderThumbCache = ConcurrentHashMap<String, FolderThumb>()
+    private val folderThumbSemaphore = Semaphore(4)
+
     /**
-     * 指定パスのエントリ一覧を取得する
+     * 指定パスのエントリ一覧を取得する（フォルダサムネは含まない。[findFolderThumbnails] で別途取得）
      * @param path 空文字の場合は共有フォルダのルートを返す
      */
     suspend fun listEntries(path: String = ""): Result<List<SmbEntry>> = withContext(Dispatchers.IO) {
@@ -65,7 +74,7 @@ class SmbRepository @Inject constructor(
                         isDirectory = file.isDirectory,
                         size = if (file.isDirectory) 0L else file.length(),
                         lastModified = file.lastModified(),
-                        thumbnailPath = if (!file.isDirectory) filePath else null
+                        thumbnail = if (!file.isDirectory) SmbThumbnailKey(filePath, file.lastModified()) else null
                     )
                 }
                 ?.filter { entry ->
@@ -74,19 +83,7 @@ class SmbRepository @Inject constructor(
                 }
                 ?: return@runCatching emptyList()
 
-            // フォルダ直下の thumbnail.{jpg,png,...} を並列に検索し、見つかればサムネに設定
-            val withFolderThumbs = coroutineScope {
-                entries.map { entry ->
-                    async {
-                        if (entry.isDirectory) {
-                            val thumbPath = findFolderThumbnail(entry.path, cifsContext)
-                            if (thumbPath != null) entry.copy(thumbnailPath = thumbPath) else entry
-                        } else entry
-                    }
-                }.awaitAll()
-            }
-
-            withFolderThumbs.sortedWith(
+            entries.sortedWith(
                 // フォルダ優先、同種は自然順ソート（数字を数値として比較）
                 compareByDescending<SmbEntry> { it.isDirectory }
                     .then(Comparator { a, b -> naturalStringComparator.compare(a.name, b.name) })
@@ -94,15 +91,39 @@ class SmbRepository @Inject constructor(
         }
     }
 
-    /** フォルダ直下に thumbnail.{jpg,jpeg,png,webp} があればその SMB URL を返す */
-    private fun findFolderThumbnail(folderPath: String, cifsContext: jcifs.CIFSContext): String? {
+    /**
+     * フォルダ直下の thumbnail.{jpg,jpeg,png,webp} を探し、見つかったフォルダだけ path -> サムネ指定で返す。
+     * 同時実行は 4 本まで。結果（見つからなかった場合も）はメモリにキャッシュし、再問い合わせしない。
+     */
+    suspend fun findFolderThumbnails(folders: List<SmbEntry>): Map<String, SmbThumbnailKey> =
+        withContext(Dispatchers.IO) {
+            val cifsContext = buildContext()
+            coroutineScope {
+                folders.filter { it.isDirectory }.map { folder ->
+                    async {
+                        val cached = folderThumbCache[folder.path]
+                        if (cached != null) return@async folder.path to cached.key
+                        folderThumbSemaphore.withPermit {
+                            val found = findFolderThumbnail(folder.path, cifsContext)
+                            // 接続失敗（例外）はキャッシュせず次回再試行する
+                            if (found.succeeded) folderThumbCache[folder.path] = FolderThumb(found.key)
+                            folder.path to found.key
+                        }
+                    }
+                }.awaitAll()
+            }.mapNotNull { (path, key) -> key?.let { path to it } }.toMap()
+        }
+
+    private class FolderSearchResult(val succeeded: Boolean, val key: SmbThumbnailKey?)
+
+    private fun findFolderThumbnail(folderPath: String, cifsContext: jcifs.CIFSContext): FolderSearchResult {
         return try {
             val folder = SmbFile(if (folderPath.endsWith("/")) folderPath else "$folderPath/", cifsContext)
-            folder.listFiles()
+            val image = folder.listFiles()
                 ?.firstOrNull { it.name.trimEnd('/').lowercase() in FOLDER_THUMBNAIL_NAMES }
-                ?.canonicalPath
+            FolderSearchResult(true, image?.let { SmbThumbnailKey(it.canonicalPath, it.lastModified()) })
         } catch (_: Exception) {
-            null
+            FolderSearchResult(false, null)
         }
     }
 

@@ -32,7 +32,6 @@ import android.view.KeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
 import com.example.hanabi.MainActivity
 import com.example.hanabi.data.smb.SmbEntry
-import com.example.hanabi.data.smb.SmbThumbnailKey
 import com.example.hanabi.viewmodel.BrowserUiState
 import com.example.hanabi.viewmodel.BrowserViewModel
 
@@ -73,9 +72,11 @@ fun BrowserScreen(
     }
 
     // コンテンツ読み込み後に最終選択位置へスクロール＆フォーカス復元
-    LaunchedEffect(uiState) {
+    // フォルダサムネ取得でエントリが差し替わっても再実行されないよう、キーは一覧のパス列にする
+    val listKey = (uiState as? BrowserUiState.Success)?.entries?.map { it.path }
+    LaunchedEffect(listKey) {
         val idx = viewModel.lastSelectedIndex
-        if (uiState is BrowserUiState.Success) {
+        if (listKey != null) {
             if (idx > 0) gridState.scrollToItem(idx)
             // グリッドアイテムの描画完了を待ってフォーカス要求
             kotlinx.coroutines.delay(50)
@@ -258,10 +259,10 @@ private fun EntryCard(
                 .background(if (entry.isDirectory) Color(0xFF1A237E) else Color(0xFF1B5E20)),
             contentAlignment = Alignment.Center
         ) {
-            if (entry.thumbnailPath != null) {
+            if (entry.thumbnail != null) {
                 // 動画 or サムネ付きフォルダ: サムネイル画像 + 下部に名前オーバーレイ + 視聴進捗バー（動画のみ）
                 AsyncImage(
-                    model = entry.thumbnailPath?.let { SmbThumbnailKey(it) },
+                    model = entry.thumbnail,
                     contentDescription = null,
                     contentScale = if (entry.isDirectory) ContentScale.Fit else ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),

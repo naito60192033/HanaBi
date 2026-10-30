@@ -7,7 +7,7 @@ data class SmbEntry(
     val isDirectory: Boolean,
     val size: Long = 0L,
     val lastModified: Long = 0L,
-    val thumbnailPath: String? = null  // Synology @eaDir サムネイルパス
+    val thumbnail: SmbThumbnailKey? = null  // サムネイル画像の指定（動画は自身、フォルダは直下の画像。未取得なら null）
 ) {
     /** 動画ファイルかどうか（拡張子で判定） */
     val isVideo: Boolean

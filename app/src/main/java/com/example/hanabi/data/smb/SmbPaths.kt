@@ -30,3 +30,33 @@ internal fun parentDirOf(relativePath: String): String =
 /** 相対パスのファイル名（最後のセグメント） */
 internal fun fileNameOf(relativePath: String): String =
     relativePath.substringAfterLast('/')
+
+/** 動画サムネ抽出ロジックのバージョン接尾辞（抽出方法を変えたらキャッシュ破棄のため上げる） */
+private const val VIDEO_THUMB_VERSION = "thumb_v3"
+
+/**
+ * サムネイルのディスクキャッシュキー（Coil の Keyer と Fetcher で共通利用）。
+ * 更新日時を含めることでファイル更新時に古いサムネを使わない。動画はバージョン接尾辞を付ける。
+ */
+internal fun thumbnailCacheKey(path: String, lastModified: Long, isVideo: Boolean): String =
+    if (isVideo) "$path#$lastModified#$VIDEO_THUMB_VERSION" else "$path#$lastModified"
+
+/** Synology が生成するサムネイル画像ファイル名（優先順） */
+private val SYNOLOGY_THUMB_NAMES = listOf(
+    "SYNOVIDEO_VIDEO_SCREENSHOT.jpg",
+    "SYNOPHOTO_THUMB_XL.jpg",
+    "SYNOPHOTO_THUMB_M.jpg"
+)
+
+/**
+ * 動画の SMB URL から Synology の `@eaDir` 内サムネイル候補パスを優先順に返す。
+ * 例: smb://h/s/dir/a.mp4 → smb://h/s/dir/@eaDir/a.mp4/SYNOVIDEO_VIDEO_SCREENSHOT.jpg ...
+ */
+internal fun synologyThumbnailCandidates(videoPath: String): List<String> {
+    val slash = videoPath.lastIndexOf('/')
+    if (slash < 0) return emptyList()
+    val dir = videoPath.substring(0, slash)
+    val fileName = videoPath.substring(slash + 1)
+    if (fileName.isEmpty()) return emptyList()
+    return SYNOLOGY_THUMB_NAMES.map { "$dir/@eaDir/$fileName/$it" }
+}
