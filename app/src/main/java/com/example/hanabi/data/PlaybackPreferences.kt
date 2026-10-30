@@ -38,6 +38,11 @@ class PlaybackPreferences @Inject constructor(
         get() = prefs.getInt("seekBackwardSec", 10)
         set(value) = prefs.edit().putInt("seekBackwardSec", value).apply()
 
+    /** 一覧の列数（4 / 5 / 6）。既定の 4 列は 1 クール 12 話が 4×3 に収まる */
+    var gridColumns: Int
+        get() = prefs.getInt("gridColumns", 4)
+        set(value) = prefs.edit().putInt("gridColumns", value).apply()
+
     /** ベータ版をアップデート対象に含めるか */
     var includeBetaUpdates: Boolean
         get() = prefs.getBoolean("includeBetaUpdates", false)

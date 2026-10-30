@@ -5,6 +5,7 @@ import com.example.hanabi.data.smb.relativePathOf
 import com.example.hanabi.data.smb.smbErrorMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.hanabi.data.PlaybackPreferences
 import com.example.hanabi.data.db.PlaybackDao
 import com.example.hanabi.data.smb.SmbConfig
 import com.example.hanabi.data.smb.SmbEntry
@@ -29,8 +30,13 @@ sealed class BrowserUiState {
 class BrowserViewModel @Inject constructor(
     private val repository: SmbRepository,
     private val config: SmbConfig,
-    private val playbackDao: PlaybackDao
+    private val playbackDao: PlaybackDao,
+    private val playbackPrefs: PlaybackPreferences
 ) : ViewModel() {
+
+    /** 一覧の列数（設定画面から戻ったときの再読み込みで反映する） */
+    private val _gridColumns = MutableStateFlow(playbackPrefs.gridColumns)
+    val gridColumns: StateFlow<Int> = _gridColumns
 
     private val _uiState = MutableStateFlow<BrowserUiState>(BrowserUiState.Loading)
     val uiState: StateFlow<BrowserUiState> = _uiState
@@ -76,6 +82,7 @@ class BrowserViewModel @Inject constructor(
 
     /** 現在のパスのエントリ一覧を読み込む */
     fun loadCurrentPath() {
+        _gridColumns.value = playbackPrefs.gridColumns
         if (!config.isConfigured) {
             _uiState.value = BrowserUiState.NotConfigured
             return

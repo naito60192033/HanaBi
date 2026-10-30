@@ -123,6 +123,14 @@ class SettingsViewModel @Inject constructor(
         playbackPrefs.seekForwardSec = sec
     }
 
+    private val _gridColumns = MutableStateFlow(playbackPrefs.gridColumns)
+    val gridColumns: StateFlow<Int> = _gridColumns
+
+    fun setGridColumns(columns: Int) {
+        _gridColumns.value = columns
+        playbackPrefs.gridColumns = columns
+    }
+
     fun setSeekBackwardSec(sec: Int) {
         _seekBackwardSec.value = sec
         playbackPrefs.seekBackwardSec = sec

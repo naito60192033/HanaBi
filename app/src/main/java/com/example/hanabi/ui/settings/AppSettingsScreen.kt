@@ -38,6 +38,7 @@ import com.example.hanabi.viewmodel.SettingsViewModel
 private val SPEED_OPTIONS = listOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
 private val SEEK_FORWARD_OPTIONS = listOf(10, 15, 30, 60)
 private val SEEK_BACKWARD_OPTIONS = listOf(5, 10, 15, 30)
+private val GRID_COLUMN_OPTIONS = listOf(4, 5, 6)
 
 /** アプリ再生設定画面 */
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -51,6 +52,7 @@ fun AppSettingsScreen(
     val autoPlayNext by viewModel.autoPlayNext.collectAsState()
     val defaultSpeed by viewModel.defaultPlaybackSpeed.collectAsState()
     val seekForwardSec by viewModel.seekForwardSec.collectAsState()
+    val gridColumns by viewModel.gridColumns.collectAsState()
     val seekBackwardSec by viewModel.seekBackwardSec.collectAsState()
     val cacheSizeBytes by viewModel.thumbnailCacheSizeBytes.collectAsState()
     var showResetConfirm by remember { mutableStateOf(false) }
@@ -115,6 +117,16 @@ fun AppSettingsScreen(
                 options = SEEK_BACKWARD_OPTIONS.map { "${it}秒" },
                 selectedIndex = SEEK_BACKWARD_OPTIONS.indexOfFirst { it == seekBackwardSec }.coerceAtLeast(0),
                 onSelect = { viewModel.setSeekBackwardSec(SEEK_BACKWARD_OPTIONS[it]) }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 一覧の列数
+            SectionLabel("一覧の列数")
+            OptionRow(
+                options = GRID_COLUMN_OPTIONS.map { "${it}列" },
+                selectedIndex = GRID_COLUMN_OPTIONS.indexOfFirst { it == gridColumns }.coerceAtLeast(0),
+                onSelect = { viewModel.setGridColumns(GRID_COLUMN_OPTIONS[it]) }
             )
 
             Spacer(modifier = Modifier.height(16.dp))

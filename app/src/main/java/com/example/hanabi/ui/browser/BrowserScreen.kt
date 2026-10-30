@@ -49,12 +49,8 @@ fun BrowserScreen(
     val focusRequester = remember { FocusRequester() }
     val settingsFocusRequester = remember { FocusRequester() }
 
-    // グリッドの列数（レイアウト情報から動的に取得）
-    val columnCount by remember {
-        derivedStateOf {
-            (gridState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.column } ?: 0) + 1
-        }
-    }
+    // グリッドの列数（設定値。画面の密度によらず固定の列数にする）
+    val columnCount by viewModel.gridColumns.collectAsState()
     // 端でのフォーカス折り返し先インデックスとFocusRequester
     var wrapTargetIndex by remember { mutableStateOf<Int?>(null) }
     val wrapFocusRequester = remember { FocusRequester() }
@@ -172,10 +168,10 @@ fun BrowserScreen(
                 // ファイル/フォルダのグリッド表示
                 LazyVerticalGrid(
                     state = gridState,
-                    columns = GridCells.Adaptive(minSize = 200.dp),
+                    columns = GridCells.Fixed(columnCount),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     itemsIndexed(state.entries, key = { _, e -> e.path }) { index, entry ->
                         EntryCard(
@@ -228,8 +224,9 @@ private fun EntryCard(
     Card(
         onClick = onClick,
         modifier = modifier
-            .width(200.dp)
-            .height(140.dp)
+            // 幅は列に合わせて伸縮し、高さは 3:2 で決める
+            .fillMaxWidth()
+            .aspectRatio(3f / 2f)
             .onKeyEvent { event ->
                 if (event.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) return@onKeyEvent false
                 when (event.nativeKeyEvent.keyCode) {
@@ -311,19 +308,19 @@ private fun EntryCard(
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
-                    modifier = Modifier.padding(12.dp)
+                    modifier = Modifier.padding(6.dp)
                 ) {
                     Icon(
                         imageVector = if (entry.isDirectory) Icons.Default.Folder else Icons.Default.PlayArrow,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(32.dp)
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = displayName(entry.name),
                         color = Color.White,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
