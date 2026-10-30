@@ -29,8 +29,8 @@ android {
         applicationId = "io.github.naito60192033.hanabi"
         minSdk = 25        // Fire TV Stick 4K (Fire OS 7)
         targetSdk = 35
-        versionCode = 19
-        versionName = "0.3.0-beta.9"
+        versionCode = 20
+        versionName = "0.3.0-beta.10"
     }
 
     signingConfigs {
