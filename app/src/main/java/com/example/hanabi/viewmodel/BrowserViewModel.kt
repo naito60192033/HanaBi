@@ -1,13 +1,19 @@
 package com.example.hanabi.viewmodel
 
+import android.util.Log
+import com.example.hanabi.data.smb.relativePathOf
+import com.example.hanabi.data.smb.smbErrorMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.hanabi.data.db.PlaybackDao
 import com.example.hanabi.data.smb.SmbConfig
 import com.example.hanabi.data.smb.SmbEntry
 import com.example.hanabi.data.smb.SmbRepository
+import com.example.hanabi.data.smb.SmbThumbnailKey
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -22,11 +28,16 @@ sealed class BrowserUiState {
 @HiltViewModel
 class BrowserViewModel @Inject constructor(
     private val repository: SmbRepository,
-    private val config: SmbConfig
+    private val config: SmbConfig,
+    private val playbackDao: PlaybackDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<BrowserUiState>(BrowserUiState.Loading)
     val uiState: StateFlow<BrowserUiState> = _uiState
+
+    /** 各動画の視聴進捗 (smbPath -> 0.0〜1.0)。サムネイル下部のバー表示用 */
+    private val _progressMap = MutableStateFlow<Map<String, Float>>(emptyMap())
+    val progressMap: StateFlow<Map<String, Float>> = _progressMap
 
     // 階層ナビゲーション用のパス履歴スタック
     private val pathStack = ArrayDeque<String>()
@@ -53,6 +64,12 @@ class BrowserViewModel @Inject constructor(
         pendingFocusSmbPath = smbVideoPath
     }
 
+    /** フォルダサムネ取得ジョブ（移動・再読み込み時に cancel） */
+    private var thumbJob: Job? = null
+
+    /** 取得済みフォルダサムネ（path -> キー）。再読み込み時のチラつき防止に一覧へ即適用する */
+    private val folderThumbs = HashMap<String, SmbThumbnailKey>()
+
     init {
         loadCurrentPath()
     }
@@ -63,11 +80,14 @@ class BrowserViewModel @Inject constructor(
             _uiState.value = BrowserUiState.NotConfigured
             return
         }
+        thumbJob?.cancel()
         viewModelScope.launch {
             // 既にデータが表示されている場合はLoading状態にしない（画面チラつき防止）
             if (_uiState.value !is BrowserUiState.Success) {
                 _uiState.value = BrowserUiState.Loading
             }
+            // 視聴進捗もあわせて再読込（プレイヤーから戻ってきた直後にも反映する）
+            loadProgress()
             repository.listEntries(currentPath)
                 .onSuccess { entries ->
                     // フォルダと動画ファイルのみ表示
@@ -78,12 +98,43 @@ class BrowserViewModel @Inject constructor(
                         if (idx >= 0) lastSelectedIndex = idx
                         pendingFocusSmbPath = null
                     }
-                    _uiState.value = BrowserUiState.Success(filtered)
+                    val withThumbs = filtered.map { e ->
+                        folderThumbs[e.path]?.let { e.copy(thumbnail = it) } ?: e
+                    }
+                    _uiState.value = BrowserUiState.Success(withThumbs)
+                    loadFolderThumbnails(withThumbs)
                 }
                 .onFailure { e ->
-                    _uiState.value = BrowserUiState.Error(e.message ?: "不明なエラー")
+                    Log.w("BrowserViewModel", "一覧取得に失敗しました", e)
+                    _uiState.value = BrowserUiState.Error(smbErrorMessage(e))
                 }
         }
+    }
+
+    /** フォルダサムネを別 Job で取得し、取得できたら Success のエントリを差し替える */
+    private fun loadFolderThumbnails(entries: List<SmbEntry>) {
+        val folders = entries.filter { it.isDirectory && it.thumbnail == null }
+        if (folders.isEmpty()) return
+        thumbJob?.cancel()
+        thumbJob = viewModelScope.launch {
+            val found = repository.findFolderThumbnails(folders)
+            if (found.isEmpty()) return@launch
+            folderThumbs.putAll(found)
+            val current = _uiState.value as? BrowserUiState.Success ?: return@launch
+            _uiState.value = BrowserUiState.Success(
+                current.entries.map { e -> found[e.path]?.let { e.copy(thumbnail = it) } ?: e }
+            )
+        }
+    }
+
+    /** DB から全動画の進捗を読み込んで progressMap を更新する */
+    private suspend fun loadProgress() {
+        val all = playbackDao.getAllProgress()
+        _progressMap.value = all.mapNotNull { p ->
+            if (p.durationMs <= 0) return@mapNotNull null
+            val ratio = (p.positionMs.toFloat() / p.durationMs).coerceIn(0f, 1f)
+            p.smbPath to ratio
+        }.toMap()
     }
 
     /** フォルダを開く */
@@ -92,7 +143,7 @@ class BrowserViewModel @Inject constructor(
         // 現在の選択インデックスを保存してからフォルダに入る
         selectedIndexStack.addLast(lastSelectedIndex)
         lastSelectedIndex = 0
-        val relativePath = extractRelativePath(entry.path)
+        val relativePath = relativePathOf(entry.path)
         pathStack.addLast(relativePath)
         loadCurrentPath()
     }
@@ -105,13 +156,5 @@ class BrowserViewModel @Inject constructor(
         lastSelectedIndex = selectedIndexStack.removeLastOrNull() ?: 0
         loadCurrentPath()
         return true
-    }
-
-    /** SMB URLから共有フォルダ以下のパスを抽出 */
-    private fun extractRelativePath(smbUrl: String): String {
-        val share = config.share
-        val idx = smbUrl.indexOf(share)
-        if (idx == -1) return ""
-        return smbUrl.substring(idx + share.length).trimStart('/')
     }
 }

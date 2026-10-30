@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,20 +8,45 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// リリース署名の設定。鍵はリポジトリ外の永続領域に置く(docs: CLAUDE.md「リリース署名」)。
+// 場所は -Phanabi.keystoreProperties=... か環境変数 HANABI_KEYSTORE_PROPERTIES で上書きできる。
+// ファイルが無い環境(CI など)では release は未署名でビルドされる。
+val keystorePropertiesFile = file(
+    (findProperty("hanabi.keystoreProperties") as String?)
+        ?: System.getenv("HANABI_KEYSTORE_PROPERTIES")
+        ?: "/workspaces/cc-projects/.secrets/hanabi/keystore.properties"
+)
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) keystorePropertiesFile.inputStream().use { load(it) }
+}
+
 android {
     namespace = "com.example.hanabi"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.hanabi"
+        // namespace(Kotlin パッケージ)は com.example.hanabi のまま。applicationId だけ変える
+        applicationId = "io.github.naito60192033.hanabi"
         minSdk = 25        // Fire TV Stick 4K (Fire OS 7)
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.2.3"
+        versionCode = 20
+        versionName = "0.3.0-beta.10"
+    }
+
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -90,4 +117,10 @@ dependencies {
 
     // Coroutines
     implementation(libs.coroutines.android)
+
+    // NanoHTTPD (FLV用ローカルHTTPプロキシ)
+    implementation(libs.nanohttpd)
+
+    // ユニットテスト (JVM)
+    testImplementation(libs.junit)
 }

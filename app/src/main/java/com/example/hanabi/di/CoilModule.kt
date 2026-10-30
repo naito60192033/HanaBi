@@ -6,6 +6,7 @@ import coil.disk.DiskCache
 import coil.key.Keyer
 import com.example.hanabi.data.smb.SmbImageFetcher
 import com.example.hanabi.data.smb.SmbThumbnailKey
+import com.example.hanabi.data.smb.thumbnailCacheKey
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -25,7 +26,9 @@ object CoilModule {
     ): ImageLoader = ImageLoader.Builder(context)
         .components {
             add(smbFetcherFactory)
-            add(Keyer<SmbThumbnailKey> { data, _ -> data.path })
+            add(Keyer<SmbThumbnailKey> { data, _ ->
+                thumbnailCacheKey(data.path, data.lastModified, SmbImageFetcher.isVideoPath(data.path))
+            })
         }
         .diskCache {
             DiskCache.Builder()

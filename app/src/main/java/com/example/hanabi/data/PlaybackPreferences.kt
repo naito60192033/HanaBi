@@ -37,4 +37,9 @@ class PlaybackPreferences @Inject constructor(
     var seekBackwardSec: Int
         get() = prefs.getInt("seekBackwardSec", 10)
         set(value) = prefs.edit().putInt("seekBackwardSec", value).apply()
+
+    /** ベータ版をアップデート対象に含めるか */
+    var includeBetaUpdates: Boolean
+        get() = prefs.getBoolean("includeBetaUpdates", false)
+        set(value) = prefs.edit().putBoolean("includeBetaUpdates", value).apply()
 }

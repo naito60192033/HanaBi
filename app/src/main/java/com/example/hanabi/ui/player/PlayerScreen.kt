@@ -5,6 +5,9 @@ package com.example.hanabi.ui.player
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -12,6 +15,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
@@ -53,6 +57,12 @@ private data class ChapterJumpEvent(
     val forward: Boolean,
     val isChapter: Boolean,
     val chapterName: String?,
+    val id: Long = System.currentTimeMillis()
+)
+
+/** 再生/一時停止トグル表示イベント */
+private data class PlayPauseEvent(
+    val isPlaying: Boolean,
     val id: Long = System.currentTimeMillis()
 )
 
@@ -103,6 +113,19 @@ fun PlayerScreen(
     val durationMs by viewModel.durationMs.collectAsState()
     val videoTitle by viewModel.videoTitle.collectAsState()
     val chapters by viewModel.chapters.collectAsState()
+    val playerError by viewModel.playerError.collectAsState()
+
+    // バックグラウンド遷移（ON_STOP）で一時停止＋保存。ON_START で自動再開はしない
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                viewModel.onAppBackground()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // 再生中のみ画面を常時点灯（スクリーンセーバー防止）
     val activity = LocalContext.current as? MainActivity
@@ -124,6 +147,8 @@ fun PlayerScreen(
     val accumulator = remember { SeekAccumulator() }
     val showSettingsOverlay = remember { mutableStateOf(false) }
     val chapterJumpEvent = remember { mutableStateOf<ChapterJumpEvent?>(null) }
+    val playPauseEvent = remember { mutableStateOf<PlayPauseEvent?>(null) }
+    val playPauseVisible = remember { mutableStateOf(false) }
 
     // コントローラー表示管理
     val showController = remember { mutableStateOf(false) }
@@ -137,6 +162,14 @@ fun PlayerScreen(
     val shouldShowResumeDialog = isPrepared && savedProgress != null &&
         !savedProgress!!.isFinished && savedProgress!!.positionMs > 30_000
     SideEffect { showResumeDialog.value = shouldShowResumeDialog }
+
+    // エラーダイアログ表示中かを playerKeyHandler / BackHandler から参照するための状態
+    val showErrorDialog = remember { mutableStateOf(false) }
+    SideEffect { showErrorDialog.value = playerError != null }
+
+    // 次エピソードバナー表示中かを playerKeyHandler から参照するための状態
+    val showNextEpisodeBannerState = remember { mutableStateOf(false) }
+    SideEffect { showNextEpisodeBannerState.value = showNextEpisodeBanner }
 
     // コントローラー自動非表示（再生中は3秒後に隠す）
     LaunchedEffect(lastKeyPressTime.longValue) {
@@ -153,14 +186,42 @@ fun PlayerScreen(
         }
     }
 
+    // 再生/一時停止トグル時に中央オーバーレイを一瞬表示（YouTube 風）
+    var lastPlayingTracked by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(isActuallyPlaying, playbackInitiated) {
+        if (!playbackInitiated) return@LaunchedEffect
+        val prev = lastPlayingTracked
+        lastPlayingTracked = isActuallyPlaying
+        if (prev == null || prev == isActuallyPlaying) return@LaunchedEffect
+        if (shouldShowResumeDialog || showNextEpisodeBanner) return@LaunchedEffect
+        playPauseEvent.value = PlayPauseEvent(isActuallyPlaying)
+        playPauseVisible.value = true
+    }
+
     // ---------------------------------------------------------------
     // Activity 最上位でキーを捕捉
     // ---------------------------------------------------------------
     DisposableEffect(Unit) {
-        MainActivity.playerKeyHandler = { event ->
+        // 左右キー・早送り/巻き戻しキー共通のシーク処理
+        fun doSeek(direction: SeekDirection) {
+            val forward = direction == SeekDirection.FORWARD
+            if (forward) viewModel.seekForward() else viewModel.seekBackward()
+            val total = accumulator.accumulate(
+                direction,
+                if (forward) viewModel.seekForwardMs else viewModel.seekBackwardMs
+            )
+            seekEvent.value = SeekEvent(
+                direction = direction,
+                totalMs = total,
+                id = System.currentTimeMillis()
+            )
+        }
+        val handler: (KeyEvent) -> Boolean = { event ->
             if (event.action == KeyEvent.ACTION_DOWN) {
                 when {
                     showResumeDialog.value -> false
+                    showErrorDialog.value -> false
+                    showNextEpisodeBannerState.value -> false
                     showSettingsOverlay.value -> {
                         when (event.keyCode) {
                             KeyEvent.KEYCODE_MENU -> {
@@ -171,33 +232,23 @@ fun PlayerScreen(
                         }
                     }
                     else -> {
-                        // キー操作でコントローラーを表示
-                        lastKeyPressTime.longValue = System.currentTimeMillis()
-                        showController.value = true
-
-                        when (event.keyCode) {
-                            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                                viewModel.seekForward()
-                                val total = accumulator.accumulate(
-                                    SeekDirection.FORWARD, viewModel.seekForwardMs
-                                )
-                                seekEvent.value = SeekEvent(
-                                    direction = SeekDirection.FORWARD,
-                                    totalMs = total,
-                                    id = System.currentTimeMillis()
-                                )
+                        val handled = when (event.keyCode) {
+                            KeyEvent.KEYCODE_DPAD_RIGHT,
+                            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                                doSeek(SeekDirection.FORWARD)
                                 true
                             }
-                            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                                viewModel.seekBackward()
-                                val total = accumulator.accumulate(
-                                    SeekDirection.BACKWARD, viewModel.seekBackwardMs
-                                )
-                                seekEvent.value = SeekEvent(
-                                    direction = SeekDirection.BACKWARD,
-                                    totalMs = total,
-                                    id = System.currentTimeMillis()
-                                )
+                            KeyEvent.KEYCODE_DPAD_LEFT,
+                            KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                                doSeek(SeekDirection.BACKWARD)
+                                true
+                            }
+                            KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                                viewModel.play()
+                                true
+                            }
+                            KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                                viewModel.pause()
                                 true
                             }
                             KeyEvent.KEYCODE_DPAD_CENTER,
@@ -232,12 +283,28 @@ fun PlayerScreen(
                             }
                             else -> false
                         }
+                        // 自分が処理したキーのときだけコントローラーを表示する。
+                        // BACK 等のここで処理しないキーで showController を true にすると、
+                        // BackHandler 側の判定（コントローラー表示中なら閉じるだけ）と競合して
+                        // 「再生中の戻るボタンで前画面に戻れない」現象になる。
+                        if (handled) {
+                            lastKeyPressTime.longValue = System.currentTimeMillis()
+                            showController.value = true
+                        }
+                        handled
                     }
                 }
             } else false
         }
+        MainActivity.playerKeyHandler = handler
         onDispose {
-            MainActivity.playerKeyHandler = null
+            // 自動次再生で popUpTo + navigate した際は、新しい PlayerScreen の
+            // DisposableEffect が先に走ってからこの onDispose が実行される。
+            // 既に新しいハンドラに差し替わっている場合は何もしない（さもないと
+            // 新しい画面で十字キー・決定が効かなくなる）。
+            if (MainActivity.playerKeyHandler === handler) {
+                MainActivity.playerKeyHandler = null
+            }
         }
     }
 
@@ -254,11 +321,18 @@ fun PlayerScreen(
     }
 
     BackHandler {
-        if (showSettingsOverlay.value) {
-            showSettingsOverlay.value = false
-        } else {
-            viewModel.saveProgress()
-            onBack()
+        when {
+            showErrorDialog.value -> {
+                // エラー表示中は「戻る」と同じ動作
+                onBack()
+            }
+            showSettingsOverlay.value -> showSettingsOverlay.value = false
+            showNextEpisodeBanner -> viewModel.dismissNextEpisodeBanner()
+            showController.value && isActuallyPlaying -> showController.value = false
+            else -> {
+                viewModel.saveProgress()
+                onBack()
+            }
         }
     }
 
@@ -279,12 +353,13 @@ fun PlayerScreen(
         )
 
         // 準備中 or バッファリング中のスピナー
-        if (!isPrepared || isBuffering) {
+        if (playerError == null && (!isPrepared || isBuffering)) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         }
 
         // isPrepared になったら再生開始判断
-        if (isPrepared && !playbackInitiated) {
+        // エラー表示中は再開ダイアログを出さない（再試行で準備し直してから判断する）
+        if (isPrepared && !playbackInitiated && playerError == null) {
             if (savedProgress != null && !savedProgress!!.isFinished && savedProgress!!.positionMs > 30_000) {
                 ResumeDialog(
                     progress = savedProgress!!,
@@ -303,6 +378,16 @@ fun PlayerScreen(
                     viewModel.playFromBeginning()
                 }
             }
+        }
+
+        // 再生エラーダイアログ
+        playerError?.let { message ->
+            PlayerErrorDialog(
+                message = message,
+                // 再生開始前のエラーなら準備だけやり直し、続きから/最初からの判断に戻す
+                onRetry = { viewModel.retryPlayback(resume = playbackInitiated) },
+                onBack = onBack
+            )
         }
 
         // カスタムプレイヤーコントロールオーバーレイ（YouTube風）
@@ -346,6 +431,20 @@ fun PlayerScreen(
                 ChapterJumpIndicator(
                     event = event,
                     onDismiss = { chapterJumpEvent.value = null }
+                )
+            }
+        }
+
+        // 再生/一時停止トグルインジケーター
+        AnimatedVisibility(
+            visible = playPauseVisible.value,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            playPauseEvent.value?.let { event ->
+                PlayPauseIndicator(
+                    event = event,
+                    onDismiss = { playPauseVisible.value = false }
                 )
             }
         }
@@ -529,6 +628,34 @@ private fun PlayerControlsOverlay(
     }
 }
 
+/** 再生/一時停止トグルインジケーター（中央に円形オーバーレイ） */
+@Composable
+private fun PlayPauseIndicator(event: PlayPauseEvent, onDismiss: () -> Unit) {
+    LaunchedEffect(event.id) {
+        delay(700)
+        onDismiss()
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .background(Color.Black.copy(alpha = 0.55f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (event.isPlaying) "▶" else "❚❚",
+                fontSize = 40.sp,
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
 /** チャプタージャンプインジケーター */
 @Composable
 private fun ChapterJumpIndicator(event: ChapterJumpEvent, onDismiss: () -> Unit) {
@@ -653,6 +780,47 @@ private fun ResumeDialog(
                 }
                 OutlinedButton(onClick = onPlayFromBeginning) {
                     Text("最初から再生")
+                }
+            }
+        }
+    }
+}
+
+/** 再生エラーダイアログ（ResumeDialog と同じ見た目・フォーカス方式） */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PlayerErrorDialog(
+    message: String,
+    onRetry: () -> Unit,
+    onBack: () -> Unit
+) {
+    val retryFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { retryFocusRequester.requestFocus() }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.7f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Button(
+                    onClick = onRetry,
+                    modifier = Modifier.focusRequester(retryFocusRequester)
+                ) {
+                    Text("再試行")
+                }
+                OutlinedButton(onClick = onBack) {
+                    Text("戻る")
                 }
             }
         }

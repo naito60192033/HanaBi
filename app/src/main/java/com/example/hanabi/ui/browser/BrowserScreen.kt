@@ -32,7 +32,6 @@ import android.view.KeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
 import com.example.hanabi.MainActivity
 import com.example.hanabi.data.smb.SmbEntry
-import com.example.hanabi.data.smb.SmbThumbnailKey
 import com.example.hanabi.viewmodel.BrowserUiState
 import com.example.hanabi.viewmodel.BrowserViewModel
 
@@ -45,6 +44,7 @@ fun BrowserScreen(
     viewModel: BrowserViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val progressMap by viewModel.progressMap.collectAsState()
     val gridState = rememberLazyGridState()
     val focusRequester = remember { FocusRequester() }
     val settingsFocusRequester = remember { FocusRequester() }
@@ -72,9 +72,11 @@ fun BrowserScreen(
     }
 
     // コンテンツ読み込み後に最終選択位置へスクロール＆フォーカス復元
-    LaunchedEffect(uiState) {
+    // フォルダサムネ取得でエントリが差し替わっても再実行されないよう、キーは一覧のパス列にする
+    val listKey = (uiState as? BrowserUiState.Success)?.entries?.map { it.path }
+    LaunchedEffect(listKey) {
         val idx = viewModel.lastSelectedIndex
-        if (uiState is BrowserUiState.Success) {
+        if (listKey != null) {
             if (idx > 0) gridState.scrollToItem(idx)
             // グリッドアイテムの描画完了を待ってフォーカス要求
             kotlinx.coroutines.delay(50)
@@ -160,7 +162,7 @@ fun BrowserScreen(
             is BrowserUiState.Error -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("接続エラー: ${state.message}", color = Color.Red)
+                        Text(state.message, color = Color.Red)
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(onClick = { viewModel.loadCurrentPath() }) {
                             Text("再試行")
@@ -184,6 +186,7 @@ fun BrowserScreen(
                             index = index,
                             columnCount = columnCount,
                             totalCount = state.entries.size,
+                            progress = progressMap[entry.path] ?: 0f,
                             modifier = when {
                                 index == viewModel.lastSelectedIndex -> Modifier.focusRequester(focusRequester)
                                 index == wrapTargetIndex -> Modifier.focusRequester(wrapFocusRequester)
@@ -215,6 +218,7 @@ private fun EntryCard(
     index: Int,
     columnCount: Int,
     totalCount: Int,
+    progress: Float,
     onClick: () -> Unit,
     onWrapFocus: (Int) -> Unit,
     onFocusSettings: () -> Unit,
@@ -255,29 +259,55 @@ private fun EntryCard(
                 .background(if (entry.isDirectory) Color(0xFF1A237E) else Color(0xFF1B5E20)),
             contentAlignment = Alignment.Center
         ) {
-            if (!entry.isDirectory && entry.thumbnailPath != null) {
-                // 動画: サムネイル画像 + 下部に名前オーバーレイ
+            if (entry.thumbnail != null) {
+                // 動画 or サムネ付きフォルダ: サムネイル画像 + 下部に名前オーバーレイ + 視聴進捗バー（動画のみ）
                 AsyncImage(
-                    model = entry.thumbnailPath?.let { SmbThumbnailKey(it) },
+                    model = entry.thumbnail,
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                    contentScale = if (entry.isDirectory) ContentScale.Fit else ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                    error = rememberVectorPainter(Icons.Default.PlayArrow)
+                    error = rememberVectorPainter(
+                        if (entry.isDirectory) Icons.Default.Folder else Icons.Default.PlayArrow
+                    )
                 )
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomStart)
-                        .background(Color.Black.copy(alpha = 0.55f))
                 ) {
-                    Text(
-                        text = displayName(entry.name),
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (entry.isDirectory) Color(0xFF1A237E).copy(alpha = 0.85f)
+                                else Color.Black.copy(alpha = 0.55f)
+                            )
+                    ) {
+                        Text(
+                            text = displayName(entry.name),
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                    if (!entry.isDirectory && progress > 0f) {
+                        // YouTube風 視聴進捗バー（カード最下端）
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(3.dp)
+                                .background(Color.Black.copy(alpha = 0.5f))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(progress.coerceIn(0.01f, 1f))
+                                    .fillMaxHeight()
+                                    .background(Color(0xFFFF0000))
+                            )
+                        }
+                    }
                 }
             } else {
                 // フォルダ or サムネイルなし: アイコン表示
@@ -307,7 +337,7 @@ private fun EntryCard(
 }
 
 /** 現在のパスからヘッダータイトルを生成 */
-private fun buildHeaderTitle(path: String): String {
+internal fun buildHeaderTitle(path: String): String {
     if (path.isBlank()) return "HanaBi"
     val parts = path.split("/").filter { it.isNotBlank() }
     val last = parts.lastOrNull() ?: return "HanaBi"
@@ -323,6 +353,6 @@ private fun buildHeaderTitle(path: String): String {
  *  `タイトル_SxxExx_エピソード名.mp4` 形式の場合はエピソード名のみ抽出 */
 private val episodeRegex = Regex("""^.+_S\d+E\d+_(.+)\.[^.]+$""")
 
-private fun displayName(name: String): String {
+internal fun displayName(name: String): String {
     return episodeRegex.find(name)?.groupValues?.get(1) ?: name
 }
