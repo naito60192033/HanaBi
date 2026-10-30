@@ -34,12 +34,19 @@ internal fun fileNameOf(relativePath: String): String =
 /** 動画サムネ抽出ロジックのバージョン接尾辞（抽出方法を変えたらキャッシュ破棄のため上げる） */
 private const val VIDEO_THUMB_VERSION = "thumb_v3"
 
+/** FLV は抽出方法が別（FlvFrameExtractor）なので、版を独立させて FLV だけ作り直せるようにする */
+private const val FLV_THUMB_VERSION = "flv_v4"
+
 /**
  * サムネイルのディスクキャッシュキー（Coil の Keyer と Fetcher で共通利用）。
  * 更新日時を含めることでファイル更新時に古いサムネを使わない。動画はバージョン接尾辞を付ける。
  */
 internal fun thumbnailCacheKey(path: String, lastModified: Long, isVideo: Boolean): String =
-    if (isVideo) "$path#$lastModified#$VIDEO_THUMB_VERSION" else "$path#$lastModified"
+    when {
+        !isVideo -> "$path#$lastModified"
+        path.lowercase().endsWith(".flv") -> "$path#$lastModified#$FLV_THUMB_VERSION"
+        else -> "$path#$lastModified#$VIDEO_THUMB_VERSION"
+    }
 
 /** Synology が生成するサムネイル画像ファイル名（優先順） */
 private val SYNOLOGY_THUMB_NAMES = listOf(

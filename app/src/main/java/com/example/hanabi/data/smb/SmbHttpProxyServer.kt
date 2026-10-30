@@ -7,9 +7,7 @@ import java.io.InputStream
 
 /**
  * SMBファイルをローカルHTTP経由で公開するプロキシサーバー。
- * MediaMetadataRetriever がHTTP URLを受け付けるため、
- * SmbMediaDataSource が対応していないフォーマット（FLV等）の
- * サムネイル取得に使用する。
+ * FLV のサムネイル取得（[FlvFrameExtractor] の ExoPlayer）に使用する。
  * Rangeリクエストに対応しシーク可能。
  */
 class SmbHttpProxyServer(private val smbFile: SmbFile) : NanoHTTPD("127.0.0.1", 0) {
@@ -17,35 +15,25 @@ class SmbHttpProxyServer(private val smbFile: SmbFile) : NanoHTTPD("127.0.0.1", 
     val url: String get() = "http://127.0.0.1:$listeningPort/file"
 
     override fun serve(session: IHTTPSession): Response {
+        // ファイル全体を公開する（シーク先が先頭付近とは限らないため。実際に読むのは要求された範囲だけ）
         val fileSize = smbFile.length()
-        // 先頭3MBに制限（FLVメタデータ・最初のキーフレームは先頭付近にある）
-        val serveSize = minOf(fileSize, 3L * 1024 * 1024)
-        val rangeHeader = session.headers["range"]
+        val range = parseRange(session.headers["range"], fileSize)
+            ?: return newFixedLengthResponse(
+                Response.Status.RANGE_NOT_SATISFIABLE, "text/plain", ""
+            ).apply { addHeader("Content-Range", "bytes */$fileSize") }
 
-        if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
-            val parts = rangeHeader.removePrefix("bytes=").split("-")
-            val start = parts[0].toLongOrNull() ?: 0L
-            val end = if (parts.size > 1 && parts[1].isNotEmpty()) {
-                minOf(parts[1].toLongOrNull() ?: (serveSize - 1), serveSize - 1)
-            } else {
-                serveSize - 1
-            }
-            val length = end - start + 1
-
-            val raf = SmbRandomAccessFile(smbFile, "r")
-            raf.seek(start)
-            val response = newFixedLengthResponse(
-                Response.Status.PARTIAL_CONTENT, "video/x-flv", RangeInputStream(raf, length), length
-            )
-            response.addHeader("Content-Range", "bytes $start-$end/$serveSize")
-            response.addHeader("Accept-Ranges", "bytes")
-            return response
-        }
-
+        val (start, end) = range
+        val length = end - start + 1
         val raf = SmbRandomAccessFile(smbFile, "r")
+        raf.seek(start)
+        val partial = session.headers["range"] != null
         val response = newFixedLengthResponse(
-            Response.Status.OK, "video/x-flv", RangeInputStream(raf, serveSize), serveSize
+            if (partial) Response.Status.PARTIAL_CONTENT else Response.Status.OK,
+            "video/x-flv",
+            RangeInputStream(raf, length),
+            length
         )
+        if (partial) response.addHeader("Content-Range", "bytes $start-$end/$fileSize")
         response.addHeader("Accept-Ranges", "bytes")
         return response
     }
@@ -68,4 +56,31 @@ class SmbHttpProxyServer(private val smbFile: SmbFile) : NanoHTTPD("127.0.0.1", 
         }
         override fun close() = raf.close()
     }
+}
+
+/**
+ * HTTP Range ヘッダー（`bytes=start-end` / `bytes=start-` / `bytes=-suffix`）を解釈し、
+ * ファイル内の [start, end]（両端含む）を返す。ヘッダーが無ければファイル全体。
+ * 範囲外・不正なら null（416 を返すべき）。
+ */
+internal fun parseRange(header: String?, fileSize: Long): Pair<Long, Long>? {
+    if (fileSize <= 0) return null
+    if (header == null) return 0L to fileSize - 1
+    if (!header.startsWith("bytes=")) return null
+    val spec = header.removePrefix("bytes=").substringBefore(',').trim()
+    val dash = spec.indexOf('-')
+    if (dash < 0) return null
+    val first = spec.substring(0, dash).trim()
+    val last = spec.substring(dash + 1).trim()
+    if (first.isEmpty()) {
+        // 末尾から suffix バイト
+        val suffix = last.toLongOrNull() ?: return null
+        if (suffix <= 0) return null
+        return maxOf(0L, fileSize - suffix) to fileSize - 1
+    }
+    val start = first.toLongOrNull() ?: return null
+    if (start < 0 || start >= fileSize) return null
+    val end = if (last.isEmpty()) fileSize - 1 else (last.toLongOrNull() ?: return null).coerceAtMost(fileSize - 1)
+    if (end < start) return null
+    return start to end
 }

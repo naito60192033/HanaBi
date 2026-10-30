@@ -10,6 +10,8 @@ class ThumbnailPathsTest {
     @Test
     fun cacheKey_video_includesPathModifiedAndVersion() {
         assertEquals("smb://h/s/a.mp4#123#thumb_v3", thumbnailCacheKey("smb://h/s/a.mp4", 123L, true))
+        // FLV は抽出方法が別なので版が独立している
+        assertEquals("smb://h/s/a.FLV#123#flv_v4", thumbnailCacheKey("smb://h/s/a.FLV", 123L, true))
     }
 
     @Test

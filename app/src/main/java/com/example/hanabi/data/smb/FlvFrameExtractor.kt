@@ -12,9 +12,11 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.util.Log
 import android.view.Surface
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -67,6 +69,10 @@ object FlvFrameExtractor {
                 val eglThread = HandlerThread("FlvEgl").also { it.start() }
                 val eglHandler = Handler(eglThread.looper)
                 val done = AtomicBoolean(false)
+                // シーク後のフレームだけを撮るためのフラグ。STATE_READY 時点では冒頭（0 秒）の
+                // フレームが描画されるため、それを撮ると暗転した冒頭が黒いサムネになる
+                val seekIssued = AtomicBoolean(false)
+                val seekRendered = AtomicBoolean(false)
 
                 var exoPlayer: ExoPlayer? = null
                 var surface: Surface? = null
@@ -162,6 +168,8 @@ object FlvFrameExtractor {
                         eglHandler.post {
                             if (done.get()) return@post
                             st.updateTexImage()
+                            // シーク完了後に描画されたフレームが来るまでは読み捨てる
+                            if (!seekRendered.get()) return@post
                             // ハードウェアデコーダ依存のスケール/反転/オフセットを取得し頂点シェーダで適用する。
                             // これを欠くと一部端末で OES テクスチャの左上 1/4 領域だけが有効になり、
                             // 残りが未書き込み（緑背景）として描画される
@@ -211,21 +219,38 @@ object FlvFrameExtractor {
 
                     // --- ExoPlayer をメインスレッドで起動 ---
                     mainHandler.post {
-                        val player = ExoPlayer.Builder(context).build()
+                        // 1 フレーム取れれば十分なので、先読みは最小限にして NAS の負荷を抑える
+                        val player = ExoPlayer.Builder(context)
+                            .setLoadControl(
+                                DefaultLoadControl.Builder()
+                                    .setBufferDurationsMs(1_000, 3_000, 250, 500)
+                                    .build()
+                            )
+                            .build()
                         exoPlayer = player
+                        // サムネ用なので音声は不要（デコードもしない。一覧表示中に音が鳴るのを防ぐ）
+                        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
+                            .build()
                         player.setVideoSurface(surface)
                         player.setMediaItem(MediaItem.fromUri(url))
                         player.addListener(object : Player.Listener {
                             override fun onPlaybackStateChanged(state: Int) {
                                 when (state) {
                                     Player.STATE_READY -> {
-                                        // 動画の15%地点へシーク後に再生
-                                        val seekMs = (player.duration * 15L / 100L).coerceAtLeast(0L)
-                                        player.seekTo(seekMs)
-                                        player.play()
+                                        // 動画の15%地点へシーク後に再生（READY はシーク後にも来るので 1 回だけ）
+                                        if (seekIssued.compareAndSet(false, true)) {
+                                            val seekMs = (player.duration * 15L / 100L).coerceAtLeast(0L)
+                                            player.seekTo(seekMs)
+                                            player.play()
+                                        }
                                     }
                                     Player.STATE_ENDED -> finish(null)
                                 }
+                            }
+                            override fun onRenderedFirstFrame() {
+                                // シーク後のレンダラーリセットを経て最初のフレームが出たら撮影を許可する
+                                if (seekIssued.get()) seekRendered.set(true)
                             }
                             override fun onPlayerError(error: PlaybackException) {
                                 Log.e(TAG, "ExoPlayer error: ${error.message}")
