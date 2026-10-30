@@ -1,6 +1,7 @@
 package com.example.hanabi.viewmodel
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.ImageLoader
@@ -8,6 +9,11 @@ import com.example.hanabi.BuildConfig
 import com.example.hanabi.data.PlaybackPreferences
 import com.example.hanabi.data.db.PlaybackDao
 import com.example.hanabi.data.smb.SmbConfig
+import com.example.hanabi.data.smb.normalizeHost
+import com.example.hanabi.data.smb.normalizeShare
+import com.example.hanabi.data.smb.smbErrorMessage
+import jcifs.CIFSContext
+import jcifs.smb.SmbFile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +23,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import javax.inject.Inject
@@ -29,6 +36,13 @@ sealed class UpdateState {
     object Downloading : UpdateState()
     data class ReadyToInstall(val apkFile: File) : UpdateState()
     data class Error(val message: String) : UpdateState()
+}
+
+sealed class ConnectionTestState {
+    object Idle : ConnectionTestState()
+    object Testing : ConnectionTestState()
+    data class Success(val count: Int) : ConnectionTestState()
+    data class Failure(val message: String) : ConnectionTestState()
 }
 
 @HiltViewModel
@@ -47,10 +61,38 @@ class SettingsViewModel @Inject constructor(
     val currentPassword get() = config.password
 
     fun save(host: String, share: String, username: String, password: String) {
-        config.host = host
-        config.share = share
-        config.username = username
+        config.host = normalizeHost(host)
+        config.share = normalizeShare(share)
+        config.username = username.trim()
         config.password = password
+    }
+
+    // 接続テスト（保存済み設定・キャッシュ済みコンテキストには触れない）
+    private val _connectionTest = MutableStateFlow<ConnectionTestState>(ConnectionTestState.Idle)
+    val connectionTest: StateFlow<ConnectionTestState> = _connectionTest
+
+    fun testConnection(host: String, share: String, username: String, password: String) {
+        if (_connectionTest.value is ConnectionTestState.Testing) return
+        val h = normalizeHost(host)
+        val s = normalizeShare(share)
+        if (h.isEmpty() || s.isEmpty()) {
+            _connectionTest.value = ConnectionTestState.Failure("ホスト名と共有フォルダ名を入力してください")
+            return
+        }
+        _connectionTest.value = ConnectionTestState.Testing
+        viewModelScope.launch(Dispatchers.IO) {
+            var temp: CIFSContext? = null
+            _connectionTest.value = try {
+                val ctx = config.createTemporaryContext(username.trim(), password).also { temp = it }
+                val count = SmbFile("smb://$h/$s/", ctx).listFiles()?.size ?: 0
+                ConnectionTestState.Success(count)
+            } catch (e: Exception) {
+                Log.w("SettingsViewModel", "接続テストに失敗しました", e)
+                ConnectionTestState.Failure(smbErrorMessage(e))
+            } finally {
+                try { temp?.close() } catch (_: Exception) {}
+            }
+        }
     }
 
     // 再生設定
@@ -171,7 +213,8 @@ class SettingsViewModel @Inject constructor(
                     _updateState.value = UpdateState.UpToDate
                 }
             } catch (e: Exception) {
-                _updateState.value = UpdateState.Error(e.message ?: "不明なエラー")
+                Log.w("SettingsViewModel", "更新の確認に失敗しました", e)
+                _updateState.value = UpdateState.Error("更新の確認に失敗しました")
             }
         }
     }
@@ -179,26 +222,48 @@ class SettingsViewModel @Inject constructor(
     fun downloadAndInstall(downloadUrl: String) {
         viewModelScope.launch(Dispatchers.IO) {
             _updateState.value = UpdateState.Downloading
+            val apkDir = File(context.cacheDir, "apk")
+            val apkFile = File(apkDir, "update.apk")
+            val partFile = File(apkDir, "update.apk.part")
+            var connection: HttpURLConnection? = null
             try {
-                val url = URL(downloadUrl)
-                val connection = url.openConnection() as HttpURLConnection
+                apkDir.mkdirs()
+                // 古い update.apk と *.part を削除
+                apkDir.listFiles()?.forEach {
+                    if (it.name == "update.apk" || it.name.endsWith(".part")) it.delete()
+                }
+
+                connection = URL(downloadUrl).openConnection() as HttpURLConnection
                 connection.connectTimeout = 30_000
                 connection.readTimeout = 60_000
-
-                val apkDir = File(context.cacheDir, "apk")
-                apkDir.mkdirs()
-                val apkFile = File(apkDir, "update.apk")
-
-                connection.inputStream.use { input ->
-                    apkFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
+                if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                    throw IOException("HTTP ${connection.responseCode}")
                 }
-                connection.disconnect()
+                val expected = connection.contentLengthLong
+
+                val written = connection.inputStream.use { input ->
+                    partFile.outputStream().use { output -> input.copyTo(output) }
+                }
+                if (expected >= 0 && written != expected) {
+                    throw IOException("サイズ不一致: $written / $expected")
+                }
+                if (!partFile.renameTo(apkFile)) throw IOException("rename 失敗")
+
+                // 自アプリのパッケージか検証
+                @Suppress("DEPRECATION")
+                val info = context.packageManager.getPackageArchiveInfo(apkFile.path, 0)
+                if (info == null || info.packageName != context.packageName) {
+                    apkFile.delete()
+                    throw IOException("パッケージ検証失敗")
+                }
 
                 _updateState.value = UpdateState.ReadyToInstall(apkFile)
             } catch (e: Exception) {
-                _updateState.value = UpdateState.Error(e.message ?: "ダウンロード失敗")
+                Log.w("SettingsViewModel", "ダウンロードに失敗しました", e)
+                partFile.delete()
+                _updateState.value = UpdateState.Error("ダウンロードに失敗しました")
+            } finally {
+                connection?.disconnect()
             }
         }
     }

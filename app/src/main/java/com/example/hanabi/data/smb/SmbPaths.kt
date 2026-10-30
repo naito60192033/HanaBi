@@ -60,3 +60,20 @@ internal fun synologyThumbnailCandidates(videoPath: String): List<String> {
     if (fileName.isEmpty()) return emptyList()
     return SYNOLOGY_THUMB_NAMES.map { "$dir/@eaDir/$fileName/$it" }
 }
+
+/**
+ * ホスト名入力の正規化。前後空白・先頭の `smb://` / `\\` を除き、最初の `/` または `\` 以降を捨てる。
+ * 例: " smb://192.168.1.10/video/ " → "192.168.1.10"
+ */
+internal fun normalizeHost(input: String): String {
+    var s = input.trim()
+    if (s.startsWith(SMB_PREFIX, ignoreCase = true)) s = s.substring(SMB_PREFIX.length)
+    s = s.trimStart('\\', '/')
+    val end = s.indexOfFirst { it == '/' || it == '\\' }
+    if (end >= 0) s = s.substring(0, end)
+    return s.trim()
+}
+
+/** 共有名入力の正規化。前後空白と前後の `/`・`\` を除く */
+internal fun normalizeShare(input: String): String =
+    input.trim().trim('/', '\\').trim()

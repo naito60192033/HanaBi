@@ -162,7 +162,7 @@ fun BrowserScreen(
             is BrowserUiState.Error -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("接続エラー: ${state.message}", color = Color.Red)
+                        Text(state.message, color = Color.Red)
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(onClick = { viewModel.loadCurrentPath() }) {
                             Text("再試行")

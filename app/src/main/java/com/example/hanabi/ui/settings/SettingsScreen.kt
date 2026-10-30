@@ -37,6 +37,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.*
+import com.example.hanabi.viewmodel.ConnectionTestState
 import com.example.hanabi.viewmodel.SettingsViewModel
 
 /** NAS接続設定画面 */
@@ -51,6 +52,7 @@ fun SettingsScreen(
     var username by remember { mutableStateOf(viewModel.currentUsername) }
     var password by remember { mutableStateOf(viewModel.currentPassword) }
     var passwordVisible by remember { mutableStateOf(false) }
+    val testState by viewModel.connectionTest.collectAsState()
     val passwordVisibilityFocusRequester = remember { FocusRequester() }
     val saveButtonFocusRequester = remember { FocusRequester() }
 
@@ -126,6 +128,22 @@ fun SettingsScreen(
                 OutlinedButton(onClick = onBack) {
                     Text("キャンセル")
                 }
+                OutlinedButton(
+                    onClick = { viewModel.testConnection(host, share, username, password) }
+                ) {
+                    Text("接続テスト")
+                }
+            }
+
+            // 接続テスト結果
+            when (val st = testState) {
+                is ConnectionTestState.Idle -> {}
+                is ConnectionTestState.Testing ->
+                    Text("接続中…", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                is ConnectionTestState.Success ->
+                    Text("接続できました（${st.count} 件）", color = Color(0xFF4ADE80), style = MaterialTheme.typography.bodyMedium)
+                is ConnectionTestState.Failure ->
+                    Text(st.message, color = Color.Red, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }

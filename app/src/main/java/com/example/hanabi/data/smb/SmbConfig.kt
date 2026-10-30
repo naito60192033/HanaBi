@@ -1,6 +1,7 @@
 package com.example.hanabi.data.smb
 
 import android.content.Context
+import android.util.Log
 import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import jcifs.CIFSContext
@@ -26,6 +27,11 @@ class SmbConfig @Inject constructor(
     private fun updateSetting(key: String, value: String, current: String) {
         if (value == current) return
         prefs.edit { putString(key, value) }
+        discardCachedContext()
+    }
+
+    /** キャッシュ済みコンテキストを破棄して close する */
+    private fun discardCachedContext() {
         val old = synchronized(_cifsLock) {
             cachedContext.also { cachedContext = null }
         }
@@ -45,9 +51,50 @@ class SmbConfig @Inject constructor(
         get() = prefs.getString("username", "guest") ?: "guest"
         set(value) = updateSetting("username", value, username)
 
+    private val passwordCipher = PasswordCipher()
+
+    /**
+     * パスワードは AndroidKeyStore で暗号化して "password_enc" に保存する。
+     * 旧版の平文 "password" が残っていれば、読み出し時に暗号化へ移行して平文を削除する。
+     * 復号に失敗した場合は空文字を返す。
+     */
     var password: String
-        get() = prefs.getString("password", "") ?: ""
-        set(value) = updateSetting("password", value, password)
+        get() {
+            val enc = prefs.getString("password_enc", null)
+            if (enc != null) return passwordCipher.decrypt(enc)
+            val legacy = prefs.getString("password", null) ?: return ""
+            try {
+                val encrypted = passwordCipher.encrypt(legacy)
+                prefs.edit {
+                    putString("password_enc", encrypted)
+                    remove("password")
+                }
+            } catch (e: Exception) {
+                // 暗号化できない場合は平文を残し、次回再試行する
+                Log.w("SmbConfig", "パスワードの暗号化移行に失敗しました", e)
+            }
+            return legacy
+        }
+        set(value) {
+            if (value == password) return
+            val encrypted = try {
+                passwordCipher.encrypt(value)
+            } catch (e: Exception) {
+                // KeyStore が使えない端末で保存操作を落とさないため、平文で保存する（次回読み出し時に移行を再試行）
+                Log.w("SmbConfig", "パスワードの暗号化に失敗しました", e)
+                null
+            }
+            prefs.edit {
+                if (encrypted != null) {
+                    putString("password_enc", encrypted)
+                    remove("password")
+                } else {
+                    putString("password", value)
+                    remove("password_enc")
+                }
+            }
+            discardCachedContext()
+        }
 
     /** 設定が完了しているか確認 */
     val isConfigured: Boolean
@@ -67,7 +114,13 @@ class SmbConfig @Inject constructor(
         cachedContext ?: createCifsContext().also { cachedContext = it }
     }
 
-    private fun createCifsContext(): CIFSContext {
+    private fun createCifsContext(): CIFSContext = createCifsContext(username, password)
+
+    /** 指定した認証情報で、キャッシュしない一時的なコンテキストを作る（接続テスト用。呼び出し側が close する） */
+    fun createTemporaryContext(username: String, password: String): CIFSContext =
+        createCifsContext(username, password)
+
+    private fun createCifsContext(username: String, password: String): CIFSContext {
         val props = Properties().apply {
             setProperty("jcifs.smb.client.minVersion", "SMB202")
             setProperty("jcifs.smb.client.maxVersion", "SMB311")

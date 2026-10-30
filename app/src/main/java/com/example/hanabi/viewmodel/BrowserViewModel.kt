@@ -1,6 +1,8 @@
 package com.example.hanabi.viewmodel
 
+import android.util.Log
 import com.example.hanabi.data.smb.relativePathOf
+import com.example.hanabi.data.smb.smbErrorMessage
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.hanabi.data.db.PlaybackDao
@@ -103,7 +105,8 @@ class BrowserViewModel @Inject constructor(
                     loadFolderThumbnails(withThumbs)
                 }
                 .onFailure { e ->
-                    _uiState.value = BrowserUiState.Error(e.message ?: "不明なエラー")
+                    Log.w("BrowserViewModel", "一覧取得に失敗しました", e)
+                    _uiState.value = BrowserUiState.Error(smbErrorMessage(e))
                 }
         }
     }
