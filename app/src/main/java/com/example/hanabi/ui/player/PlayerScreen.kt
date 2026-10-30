@@ -2,6 +2,7 @@
 
 package com.example.hanabi.ui.player
 
+import com.example.hanabi.ui.theme.HanaBiColors
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -241,7 +242,7 @@ fun PlayerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(HanaBiColors.ScreenBackground)
     ) {
         // PlayerView（コントローラーは使用しない）
         AndroidView(

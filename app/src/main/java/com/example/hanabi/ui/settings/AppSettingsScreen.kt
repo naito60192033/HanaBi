@@ -1,5 +1,7 @@
 package com.example.hanabi.ui.settings
 
+import com.example.hanabi.data.PLAYBACK_SPEED_OPTIONS
+import com.example.hanabi.ui.theme.HanaBiColors
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +15,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.res.stringResource
+import com.example.hanabi.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -35,7 +39,6 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.example.hanabi.viewmodel.SettingsViewModel
 
-private val SPEED_OPTIONS = listOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
 private val SEEK_FORWARD_OPTIONS = listOf(10, 15, 30, 60)
 private val SEEK_BACKWARD_OPTIONS = listOf(5, 10, 15, 30)
 private val GRID_COLUMN_OPTIONS = listOf(4, 5, 6)
@@ -64,7 +67,7 @@ fun AppSettingsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF121212))
+            .background(HanaBiColors.MenuBackground)
     ) {
         Column(
             modifier = Modifier
@@ -74,15 +77,15 @@ fun AppSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "再生設定",
-                color = Color.White,
+                text = stringResource(R.string.app_title),
+                color = HanaBiColors.TextPrimary,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
             // 次エピソード自動再生
-            SectionLabel("次エピソード自動再生")
+            SectionLabel(stringResource(R.string.app_auto_next))
             ToggleRow(
                 options = listOf("OFF", "ON"),
                 selectedIndex = if (autoPlayNext) 1 else 0,
@@ -92,19 +95,19 @@ fun AppSettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             // デフォルト再生速度
-            SectionLabel("デフォルト再生速度")
+            SectionLabel(stringResource(R.string.app_default_speed))
             OptionRow(
-                options = SPEED_OPTIONS.map { "${it}x".replace(".0x", "x") },
-                selectedIndex = SPEED_OPTIONS.indexOfFirst { it == defaultSpeed }.coerceAtLeast(0),
-                onSelect = { viewModel.setDefaultPlaybackSpeed(SPEED_OPTIONS[it]) }
+                options = PLAYBACK_SPEED_OPTIONS.map { "${it}x".replace(".0x", "x") },
+                selectedIndex = PLAYBACK_SPEED_OPTIONS.indexOfFirst { it == defaultSpeed }.coerceAtLeast(0),
+                onSelect = { viewModel.setDefaultPlaybackSpeed(PLAYBACK_SPEED_OPTIONS[it]) }
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
             // 早送り秒数
-            SectionLabel("早送り秒数")
+            SectionLabel(stringResource(R.string.app_seek_forward))
             OptionRow(
-                options = SEEK_FORWARD_OPTIONS.map { "${it}秒" },
+                options = SEEK_FORWARD_OPTIONS.map { stringResource(R.string.app_seconds_option, it) },
                 selectedIndex = SEEK_FORWARD_OPTIONS.indexOfFirst { it == seekForwardSec }.coerceAtLeast(0),
                 onSelect = { viewModel.setSeekForwardSec(SEEK_FORWARD_OPTIONS[it]) }
             )
@@ -112,9 +115,9 @@ fun AppSettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             // 巻き戻し秒数
-            SectionLabel("巻き戻し秒数")
+            SectionLabel(stringResource(R.string.app_seek_backward))
             OptionRow(
-                options = SEEK_BACKWARD_OPTIONS.map { "${it}秒" },
+                options = SEEK_BACKWARD_OPTIONS.map { stringResource(R.string.app_seconds_option, it) },
                 selectedIndex = SEEK_BACKWARD_OPTIONS.indexOfFirst { it == seekBackwardSec }.coerceAtLeast(0),
                 onSelect = { viewModel.setSeekBackwardSec(SEEK_BACKWARD_OPTIONS[it]) }
             )
@@ -122,9 +125,9 @@ fun AppSettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             // 一覧の列数
-            SectionLabel("一覧の列数")
+            SectionLabel(stringResource(R.string.app_grid_columns))
             OptionRow(
-                options = GRID_COLUMN_OPTIONS.map { "${it}列" },
+                options = GRID_COLUMN_OPTIONS.map { stringResource(R.string.app_columns_option, it) },
                 selectedIndex = GRID_COLUMN_OPTIONS.indexOfFirst { it == gridColumns }.coerceAtLeast(0),
                 onSelect = { viewModel.setGridColumns(GRID_COLUMN_OPTIONS[it]) }
             )
@@ -132,17 +135,17 @@ fun AppSettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             // サムネイルキャッシュ
-            SectionLabel("サムネイルキャッシュ")
+            SectionLabel(stringResource(R.string.app_thumb_cache))
             Text(
-                text = "現在のサイズ: ${formatBytes(cacheSizeBytes)}",
-                color = Color.White,
+                text = stringResource(R.string.app_cache_size, formatBytes(cacheSizeBytes)),
+                color = HanaBiColors.TextPrimary,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
             if (cacheClearDone) {
                 Text(
-                    text = "クリアしました",
-                    color = Color(0xFF4CAF50),
+                    text = stringResource(R.string.app_cache_cleared),
+                    color = HanaBiColors.Success,
                     fontSize = 14.sp,
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
@@ -153,22 +156,22 @@ fun AppSettingsScreen(
                         cacheClearDone = true
                     },
                     colors = ButtonDefaults.colors(
-                        containerColor = Color(0xFF333333),
-                        focusedContainerColor = Color(0xFFB71C1C),
+                        containerColor = HanaBiColors.Surface,
+                        focusedContainerColor = HanaBiColors.Destructive,
                     )
                 ) {
-                    Text("キャッシュをクリア", color = Color.White)
+                    Text(stringResource(R.string.app_clear_cache), color = HanaBiColors.TextPrimary)
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             // 再生履歴リセット
-            SectionLabel("再生履歴")
+            SectionLabel(stringResource(R.string.app_history))
             if (resetDone) {
                 Text(
-                    text = "リセットしました",
-                    color = Color(0xFF4CAF50),
+                    text = stringResource(R.string.app_history_reset_done),
+                    color = HanaBiColors.Success,
                     fontSize = 14.sp,
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
@@ -176,11 +179,11 @@ fun AppSettingsScreen(
                 Button(
                     onClick = { showResetConfirm = true },
                     colors = ButtonDefaults.colors(
-                        containerColor = Color(0xFF333333),
-                        focusedContainerColor = Color(0xFFB71C1C),
+                        containerColor = HanaBiColors.Surface,
+                        focusedContainerColor = HanaBiColors.Destructive,
                     )
                 ) {
-                    Text("再生履歴をリセット", color = Color.White)
+                    Text(stringResource(R.string.app_reset_history), color = HanaBiColors.TextPrimary)
                 }
             }
         }
@@ -210,7 +213,7 @@ private fun formatBytes(bytes: Long): String = when {
 private fun SectionLabel(text: String) {
     Text(
         text = text,
-        color = Color.Gray,
+        color = HanaBiColors.TextSecondary,
         fontSize = 13.sp,
         modifier = Modifier.padding(bottom = 4.dp)
     )
@@ -229,11 +232,11 @@ private fun ToggleRow(
             Button(
                 onClick = { onSelect(index) },
                 colors = ButtonDefaults.colors(
-                    containerColor = if (isSelected) Color(0xFF1565C0) else Color(0xFF2A2A2A),
-                    focusedContainerColor = if (isSelected) Color(0xFF1976D2) else Color(0xFF444444),
+                    containerColor = if (isSelected) HanaBiColors.Accent else HanaBiColors.Surface,
+                    focusedContainerColor = if (isSelected) HanaBiColors.AccentFocused else HanaBiColors.SurfaceFocused,
                 )
             ) {
-                Text(label, color = Color.White, fontSize = 16.sp)
+                Text(label, color = HanaBiColors.TextPrimary, fontSize = 16.sp)
             }
         }
     }
@@ -252,11 +255,11 @@ private fun OptionRow(
             Button(
                 onClick = { onSelect(index) },
                 colors = ButtonDefaults.colors(
-                    containerColor = if (isSelected) Color(0xFF1565C0) else Color(0xFF2A2A2A),
-                    focusedContainerColor = if (isSelected) Color(0xFF1976D2) else Color(0xFF444444),
+                    containerColor = if (isSelected) HanaBiColors.Accent else HanaBiColors.Surface,
+                    focusedContainerColor = if (isSelected) HanaBiColors.AccentFocused else HanaBiColors.SurfaceFocused,
                 )
             ) {
-                Text(label, color = Color.White, fontSize = 14.sp)
+                Text(label, color = HanaBiColors.TextPrimary, fontSize = 14.sp)
             }
         }
     }
@@ -274,25 +277,25 @@ private fun ConfirmResetDialog(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.7f)),
+            .background(HanaBiColors.Scrim.copy(alpha = 0.7f)),
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
-                .background(Color(0xFF1E1E1E), shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                .background(HanaBiColors.DialogBackground, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
                 .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "再生履歴をリセットしますか？",
-                color = Color.White,
+                text = stringResource(R.string.app_reset_confirm_title),
+                color = HanaBiColors.TextPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "「続きから再生」の記録がすべて削除されます。",
-                color = Color.Gray,
+                text = stringResource(R.string.app_reset_confirm_message),
+                color = HanaBiColors.TextSecondary,
                 fontSize = 14.sp
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -300,20 +303,20 @@ private fun ConfirmResetDialog(
                     onClick = onDismiss,
                     modifier = Modifier.focusRequester(focusRequester),
                     colors = ButtonDefaults.colors(
-                        containerColor = Color(0xFF333333),
-                        focusedContainerColor = Color(0xFF555555),
+                        containerColor = HanaBiColors.Surface,
+                        focusedContainerColor = HanaBiColors.SurfaceFocused,
                     )
                 ) {
-                    Text("キャンセル", color = Color.White)
+                    Text(stringResource(R.string.app_cancel), color = HanaBiColors.TextPrimary)
                 }
                 Button(
                     onClick = onConfirm,
                     colors = ButtonDefaults.colors(
-                        containerColor = Color(0xFFB71C1C),
-                        focusedContainerColor = Color(0xFFC62828),
+                        containerColor = HanaBiColors.Destructive,
+                        focusedContainerColor = HanaBiColors.DestructiveFocused,
                     )
                 ) {
-                    Text("リセット", color = Color.White)
+                    Text(stringResource(R.string.app_reset), color = HanaBiColors.TextPrimary)
                 }
             }
         }

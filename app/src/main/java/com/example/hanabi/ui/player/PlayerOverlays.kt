@@ -2,6 +2,7 @@
 
 package com.example.hanabi.ui.player
 
+import com.example.hanabi.ui.theme.HanaBiColors
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -11,6 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.res.stringResource
+import com.example.hanabi.R
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,7 +101,7 @@ internal fun PlayerControlsOverlay(
                     .align(Alignment.TopCenter)
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Black.copy(alpha = 0.75f), Color.Transparent)
+                            colors = listOf(HanaBiColors.Scrim.copy(alpha = 0.75f), Color.Transparent)
                         )
                     )
                     .padding(horizontal = 32.dp, vertical = 24.dp)
@@ -106,7 +109,7 @@ internal fun PlayerControlsOverlay(
                 Column {
                     Text(
                         text = title,
-                        color = Color.White,
+                        color = HanaBiColors.TextPrimary,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
@@ -116,7 +119,7 @@ internal fun PlayerControlsOverlay(
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = currentChapterName,
-                            color = Color.White.copy(alpha = 0.7f),
+                            color = HanaBiColors.TextPrimary.copy(alpha = 0.7f),
                             fontSize = 14.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -132,7 +135,7 @@ internal fun PlayerControlsOverlay(
                     .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
+                            colors = listOf(Color.Transparent, HanaBiColors.Scrim.copy(alpha = 0.8f))
                         )
                     )
                     .padding(horizontal = 32.dp)
@@ -149,14 +152,14 @@ internal fun PlayerControlsOverlay(
 
                     // トラック背景
                     drawRect(
-                        color = Color.White.copy(alpha = 0.3f),
+                        color = HanaBiColors.TextPrimary.copy(alpha = 0.3f),
                         topLeft = Offset(0f, barTop),
                         size = size.copy(height = barH)
                     )
                     // 再生済み部分（YouTube風レッド）
                     if (progress > 0f) {
                         drawRect(
-                            color = Color(0xFFFF0000),
+                            color = HanaBiColors.ProgressBar,
                             topLeft = Offset(0f, barTop),
                             size = size.copy(width = size.width * progress, height = barH)
                         )
@@ -168,7 +171,7 @@ internal fun PlayerControlsOverlay(
                             if (chapter.positionMs <= 0 || chapter.positionMs >= durationMs) continue
                             val x = size.width * (chapter.positionMs.toFloat() / durationMs)
                             drawRect(
-                                color = Color.Black.copy(alpha = 0.9f),
+                                color = HanaBiColors.Scrim.copy(alpha = 0.9f),
                                 topLeft = Offset(x - markerW / 2, barTop),
                                 size = size.copy(width = markerW, height = barH)
                             )
@@ -177,7 +180,7 @@ internal fun PlayerControlsOverlay(
                     // サム（白丸）
                     if (progress > 0f && progress < 1f) {
                         drawCircle(
-                            color = Color.White,
+                            color = HanaBiColors.TextPrimary,
                             radius = 7.dp.toPx(),
                             center = Offset(size.width * progress, size.height / 2)
                         )
@@ -193,7 +196,7 @@ internal fun PlayerControlsOverlay(
                 ) {
                     Text(
                         text = formatTime(currentPositionMs),
-                        color = Color.White,
+                        color = HanaBiColors.TextPrimary,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -204,13 +207,13 @@ internal fun PlayerControlsOverlay(
                         if (playbackSpeed != 1.0f) {
                             Text(
                                 text = "${playbackSpeed}x".replace(".0x", "x"),
-                                color = Color.White.copy(alpha = 0.7f),
+                                color = HanaBiColors.TextPrimary.copy(alpha = 0.7f),
                                 fontSize = 13.sp
                             )
                         }
                         Text(
                             text = formatTime(durationMs),
-                            color = Color.White.copy(alpha = 0.7f),
+                            color = HanaBiColors.TextPrimary.copy(alpha = 0.7f),
                             fontSize = 14.sp
                         )
                     }
@@ -235,13 +238,13 @@ internal fun PlayPauseIndicator(event: PlayPauseEvent, onDismiss: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(96.dp)
-                .background(Color.Black.copy(alpha = 0.55f), CircleShape),
+                .background(HanaBiColors.Scrim.copy(alpha = 0.55f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = if (event.isPlaying) "▶" else "❚❚",
                 fontSize = 40.sp,
-                color = Color.White,
+                color = HanaBiColors.TextPrimary,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -262,7 +265,7 @@ internal fun ChapterJumpIndicator(event: ChapterJumpEvent, onDismiss: () -> Unit
     ) {
         Column(
             modifier = Modifier
-                .background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(14.dp))
+                .background(HanaBiColors.Scrim.copy(alpha = 0.72f), RoundedCornerShape(14.dp))
                 .padding(horizontal = 28.dp, vertical = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -270,16 +273,16 @@ internal fun ChapterJumpIndicator(event: ChapterJumpEvent, onDismiss: () -> Unit
             Text(
                 text = if (event.forward) "▲" else "▼",
                 fontSize = 26.sp,
-                color = Color.White
+                color = HanaBiColors.TextPrimary
             )
             Text(
                 text = when {
                     event.isChapter && !event.chapterName.isNullOrBlank() -> event.chapterName
-                    event.isChapter -> if (event.forward) "次のチャプター" else "前のチャプター"
-                    else -> if (event.forward) "+10分" else "−10分"
+                    event.isChapter -> if (event.forward) stringResource(R.string.player_next_chapter) else stringResource(R.string.player_prev_chapter)
+                    else -> if (event.forward) stringResource(R.string.player_skip_forward_10min) else stringResource(R.string.player_skip_back_10min)
                 },
                 fontSize = 16.sp,
-                color = Color.White,
+                color = HanaBiColors.TextPrimary,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -310,7 +313,7 @@ internal fun SeekIndicator(seekEvent: SeekEvent, onDismiss: () -> Unit) {
                     end = if (isForward) 32.dp else 0.dp
                 )
                 .background(
-                    color = Color.Black.copy(alpha = 0.55f),
+                    color = HanaBiColors.Scrim.copy(alpha = 0.55f),
                     shape = RoundedCornerShape(20.dp)
                 ),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -319,14 +322,14 @@ internal fun SeekIndicator(seekEvent: SeekEvent, onDismiss: () -> Unit) {
             Text(
                 text = if (isForward) "▶▶" else "◀◀",
                 fontSize = 38.sp,
-                color = Color.White,
+                color = HanaBiColors.TextPrimary,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = if (isForward) "+${seconds}秒" else "−${seconds}秒",
+                text = if (isForward) stringResource(R.string.player_seek_forward_sec, seconds) else stringResource(R.string.player_seek_back_sec, seconds),
                 fontSize = 18.sp,
-                color = Color.White,
+                color = HanaBiColors.TextPrimary,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -347,7 +350,7 @@ internal fun ResumeDialog(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.7f)),
+            .background(HanaBiColors.Scrim.copy(alpha = 0.7f)),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -355,23 +358,23 @@ internal fun ResumeDialog(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "前回の続きから再生しますか？",
+                text = stringResource(R.string.player_resume_title),
                 style = MaterialTheme.typography.headlineSmall,
-                color = Color.White
+                color = HanaBiColors.TextPrimary
             )
             Text(
-                text = "再生位置: ${formatTime(progress.positionMs)} / ${formatTime(progress.durationMs)}",
-                color = Color.Gray
+                text = stringResource(R.string.player_resume_position, formatTime(progress.positionMs), formatTime(progress.durationMs)),
+                color = HanaBiColors.TextSecondary
             )
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Button(
                     onClick = onResume,
                     modifier = Modifier.focusRequester(resumeFocusRequester)
                 ) {
-                    Text("続きから再生")
+                    Text(stringResource(R.string.player_resume_play))
                 }
                 OutlinedButton(onClick = onPlayFromBeginning) {
-                    Text("最初から再生")
+                    Text(stringResource(R.string.player_play_from_start))
                 }
             }
         }
@@ -392,7 +395,7 @@ internal fun PlayerErrorDialog(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.7f)),
+            .background(HanaBiColors.Scrim.copy(alpha = 0.7f)),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -402,17 +405,17 @@ internal fun PlayerErrorDialog(
             Text(
                 text = message,
                 style = MaterialTheme.typography.headlineSmall,
-                color = Color.White
+                color = HanaBiColors.TextPrimary
             )
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Button(
                     onClick = onRetry,
                     modifier = Modifier.focusRequester(retryFocusRequester)
                 ) {
-                    Text("再試行")
+                    Text(stringResource(R.string.player_retry))
                 }
                 OutlinedButton(onClick = onBack) {
-                    Text("戻る")
+                    Text(stringResource(R.string.player_back))
                 }
             }
         }

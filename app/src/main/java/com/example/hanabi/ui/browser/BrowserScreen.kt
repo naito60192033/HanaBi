@@ -1,5 +1,6 @@
 package com.example.hanabi.ui.browser
 
+import com.example.hanabi.ui.theme.HanaBiColors
 import androidx.activity.compose.BackHandler
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -8,7 +9,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -16,6 +19,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.res.stringResource
+import com.example.hanabi.R
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.alpha
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,7 +36,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.tv.material3.*
 import coil.compose.AsyncImage
 import android.view.KeyEvent
@@ -76,7 +86,9 @@ fun BrowserScreen(
             if (idx > 0) gridState.scrollToItem(idx)
             // グリッドアイテムの描画完了を待ってフォーカス要求
             kotlinx.coroutines.delay(50)
-            try { focusRequester.requestFocus() } catch (_: Exception) {}
+            // 空フォルダのときはグリッドにフォーカス先が無いので設定ボタンに当てる
+            val target = if (listKey.isEmpty()) settingsFocusRequester else focusRequester
+            try { target.requestFocus() } catch (_: Exception) {}
         }
     }
 
@@ -108,7 +120,7 @@ fun BrowserScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(HanaBiColors.ScreenBackground)
             .padding(horizontal = 48.dp, vertical = 27.dp)
     ) {
         // ヘッダー行（タイトル + 設定ボタン）
@@ -120,13 +132,14 @@ fun BrowserScreen(
             Text(
                 text = buildHeaderTitle(viewModel.currentPath),
                 style = MaterialTheme.typography.headlineMedium,
-                color = Color.White
+                color = HanaBiColors.TextPrimary
             )
             IconButton(
                 onClick = onNavigateToSettings,
                 modifier = Modifier.focusRequester(settingsFocusRequester)
             ) {
-                Icon(Icons.Default.Settings, contentDescription = "設定", tint = Color.White)
+                // tint を指定しない: フォーカス時は背景が白になるので、IconButton が状態に応じた文字色を渡す
+                Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.browser_settings))
             }
         }
 
@@ -135,18 +148,16 @@ fun BrowserScreen(
         // メインコンテンツ
         when (val state = uiState) {
             is BrowserUiState.Loading -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
+                LoadingSkeleton(columnCount = columnCount)
             }
 
             is BrowserUiState.NotConfigured -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("NASの接続設定が必要です", color = Color.White)
+                        Text(stringResource(R.string.browser_not_configured), color = HanaBiColors.TextPrimary)
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(onClick = onNavigateToSettings) {
-                            Text("設定を開く")
+                            Text(stringResource(R.string.browser_open_settings))
                         }
                     }
                 }
@@ -155,16 +166,18 @@ fun BrowserScreen(
             is BrowserUiState.Error -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(state.message, color = Color.Red)
+                        Text(state.message, color = HanaBiColors.Error)
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(onClick = { viewModel.loadCurrentPath() }) {
-                            Text("再試行")
+                            Text(stringResource(R.string.browser_retry))
                         }
                     }
                 }
             }
 
-            is BrowserUiState.Success -> {
+            is BrowserUiState.Success -> if (state.entries.isEmpty()) {
+                EmptyFolder()
+            } else {
                 // ファイル/フォルダのグリッド表示
                 LazyVerticalGrid(
                     state = gridState,
@@ -199,6 +212,62 @@ fun BrowserScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/** 読み込み中のスケルトン表示（本番と同じ列数・カード形状のプレースホルダーを 3 行分並べる） */
+@Composable
+private fun LoadingSkeleton(columnCount: Int) {
+    val transition = rememberInfiniteTransition(label = "skeleton")
+    val alpha by transition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(tween(1000), RepeatMode.Reverse),
+        label = "skeletonAlpha"
+    )
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(columnCount),
+        userScrollEnabled = false,
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(columnCount * 3) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(3f / 2f)
+                    .alpha(alpha)
+                    .background(HanaBiColors.Surface, RoundedCornerShape(8.dp))
+            )
+        }
+    }
+}
+
+/** 空フォルダの表示 */
+@Composable
+private fun EmptyFolder() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = Icons.Default.Folder,
+                contentDescription = null,
+                tint = HanaBiColors.TextSecondary,
+                modifier = Modifier.size(64.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = stringResource(R.string.browser_empty_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = HanaBiColors.TextPrimary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.browser_empty_hint),
+                style = MaterialTheme.typography.bodyMedium,
+                color = HanaBiColors.TextSecondary
+            )
         }
     }
 }
@@ -250,7 +319,7 @@ private fun EntryCard(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(if (entry.isDirectory) Color(0xFF1A237E) else Color(0xFF1B5E20)),
+                .background(if (entry.isDirectory) HanaBiColors.FolderCard else HanaBiColors.VideoCardBase),
             contentAlignment = Alignment.Center
         ) {
             if (entry.thumbnail != null) {
@@ -273,13 +342,13 @@ private fun EntryCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                if (entry.isDirectory) Color(0xFF1A237E).copy(alpha = 0.85f)
-                                else Color.Black.copy(alpha = 0.55f)
+                                if (entry.isDirectory) HanaBiColors.FolderCard.copy(alpha = 0.85f)
+                                else HanaBiColors.Scrim.copy(alpha = 0.55f)
                             )
                     ) {
                         Text(
                             text = displayName(entry.name),
-                            color = Color.White,
+                            color = HanaBiColors.TextPrimary,
                             style = MaterialTheme.typography.bodySmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -292,13 +361,13 @@ private fun EntryCard(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(3.dp)
-                                .background(Color.Black.copy(alpha = 0.5f))
+                                .background(HanaBiColors.Scrim.copy(alpha = 0.5f))
                         ) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth(progress.coerceIn(0.01f, 1f))
                                     .fillMaxHeight()
-                                    .background(Color(0xFFFF0000))
+                                    .background(HanaBiColors.ProgressBar)
                             )
                         }
                     }
@@ -313,13 +382,13 @@ private fun EntryCard(
                     Icon(
                         imageVector = if (entry.isDirectory) Icons.Default.Folder else Icons.Default.PlayArrow,
                         contentDescription = null,
-                        tint = Color.White,
+                        tint = HanaBiColors.TextPrimary,
                         modifier = Modifier.size(32.dp)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = displayName(entry.name),
-                        color = Color.White,
+                        color = HanaBiColors.TextPrimary,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis

@@ -10,7 +10,15 @@ import androidx.tv.material3.darkColorScheme
 @Composable
 fun HanaBiTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = darkColorScheme(),
+        colorScheme = darkColorScheme(
+            primary = HanaBiColors.Accent,
+            onPrimary = HanaBiColors.TextPrimary,
+            background = HanaBiColors.ScreenBackground,
+            onBackground = HanaBiColors.TextPrimary,
+            surface = HanaBiColors.Surface,
+            onSurface = HanaBiColors.TextPrimary,
+            error = HanaBiColors.Error
+        ),
         content = content
     )
 }

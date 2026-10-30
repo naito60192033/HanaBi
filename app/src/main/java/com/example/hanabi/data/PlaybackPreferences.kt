@@ -48,3 +48,6 @@ class PlaybackPreferences @Inject constructor(
         get() = prefs.getBoolean("includeBetaUpdates", false)
         set(value) = prefs.edit().putBoolean("includeBetaUpdates", value).apply()
 }
+
+/** 再生速度の選択肢（プレーヤーの設定パネルとアプリ設定で共通） */
+val PLAYBACK_SPEED_OPTIONS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)

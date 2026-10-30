@@ -1,5 +1,6 @@
 package com.example.hanabi.ui.settings
 
+import com.example.hanabi.ui.theme.HanaBiColors
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -9,6 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.res.stringResource
+import com.example.hanabi.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -69,7 +72,7 @@ fun UpdateScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF121212)),
+            .background(HanaBiColors.MenuBackground),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -80,16 +83,16 @@ fun UpdateScreen(
                 .padding(32.dp)
         ) {
             Text(
-                text = "アップデート確認",
-                color = Color.White,
+                text = stringResource(R.string.update_title),
+                color = HanaBiColors.TextPrimary,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
             Text(
-                text = "現在のバージョン: v${BuildConfig.VERSION_NAME}",
-                color = Color.Gray,
+                text = stringResource(R.string.update_current_version, BuildConfig.VERSION_NAME),
+                color = HanaBiColors.TextSecondary,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
@@ -99,13 +102,13 @@ fun UpdateScreen(
                     Button(
                         onClick = { viewModel.setIncludeBetaUpdates(!includeBeta) },
                         colors = ButtonDefaults.colors(
-                            containerColor = if (includeBeta) Color(0xFF1B5E20) else Color(0xFF2A2A2A),
-                            focusedContainerColor = if (includeBeta) Color(0xFF2E7D32) else Color(0xFF444444),
+                            containerColor = if (includeBeta) HanaBiColors.SuccessContainer else HanaBiColors.Surface,
+                            focusedContainerColor = if (includeBeta) HanaBiColors.SuccessContainerFocused else HanaBiColors.SurfaceFocused,
                         )
                     ) {
                         Text(
-                            text = "ベータ版を含む: ${if (includeBeta) "ON" else "OFF"}",
-                            color = if (includeBeta) Color(0xFF81C784) else Color.Gray,
+                            text = stringResource(R.string.update_include_beta, if (includeBeta) "ON" else "OFF"),
+                            color = if (includeBeta) HanaBiColors.Success else HanaBiColors.TextSecondary,
                             fontSize = 14.sp
                         )
                     }
@@ -114,26 +117,26 @@ fun UpdateScreen(
                         onClick = { viewModel.checkForUpdate() },
                         modifier = Modifier.focusRequester(firstFocus),
                         colors = ButtonDefaults.colors(
-                            containerColor = Color(0xFF2A2A2A),
-                            focusedContainerColor = Color(0xFF1565C0),
+                            containerColor = HanaBiColors.Surface,
+                            focusedContainerColor = HanaBiColors.Accent,
                         )
                     ) {
-                        Text("アップデートを確認", color = Color.White, fontSize = 16.sp)
+                        Text(stringResource(R.string.update_check), color = HanaBiColors.TextPrimary, fontSize = 16.sp)
                     }
                 }
 
                 is UpdateState.Checking -> {
                     Text(
-                        text = "確認中...",
-                        color = Color.White,
+                        text = stringResource(R.string.update_checking),
+                        color = HanaBiColors.TextPrimary,
                         fontSize = 16.sp
                     )
                 }
 
                 is UpdateState.UpToDate -> {
                     Text(
-                        text = "最新バージョンを使用しています",
-                        color = Color(0xFF4CAF50),
+                        text = stringResource(R.string.update_latest),
+                        color = HanaBiColors.Success,
                         fontSize = 16.sp
                     )
                     LaunchedEffect(Unit) { firstFocus.requestFocus() }
@@ -141,18 +144,18 @@ fun UpdateScreen(
                         onClick = { viewModel.resetUpdateState(); onBack() },
                         modifier = Modifier.focusRequester(firstFocus),
                         colors = ButtonDefaults.colors(
-                            containerColor = Color(0xFF2A2A2A),
-                            focusedContainerColor = Color(0xFF444444),
+                            containerColor = HanaBiColors.Surface,
+                            focusedContainerColor = HanaBiColors.SurfaceFocused,
                         )
                     ) {
-                        Text("戻る", color = Color.White, fontSize = 16.sp)
+                        Text(stringResource(R.string.update_back), color = HanaBiColors.TextPrimary, fontSize = 16.sp)
                     }
                 }
 
                 is UpdateState.UpdateAvailable -> {
                     Text(
-                        text = "${state.version} が利用可能です",
-                        color = Color(0xFFFFB300),
+                        text = stringResource(R.string.update_available, state.version),
+                        color = HanaBiColors.Warning,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -161,34 +164,34 @@ fun UpdateScreen(
                         onClick = { viewModel.downloadAndInstall(state.downloadUrl) },
                         modifier = Modifier.focusRequester(firstFocus),
                         colors = ButtonDefaults.colors(
-                            containerColor = Color(0xFF1565C0),
-                            focusedContainerColor = Color(0xFF1976D2),
+                            containerColor = HanaBiColors.Accent,
+                            focusedContainerColor = HanaBiColors.AccentFocused,
                         )
                     ) {
-                        Text("ダウンロードしてインストール", color = Color.White, fontSize = 16.sp)
+                        Text(stringResource(R.string.update_download_install), color = HanaBiColors.TextPrimary, fontSize = 16.sp)
                     }
                 }
 
                 is UpdateState.Downloading -> {
                     Text(
-                        text = "ダウンロード中...",
-                        color = Color.White,
+                        text = stringResource(R.string.update_downloading),
+                        color = HanaBiColors.TextPrimary,
                         fontSize = 16.sp
                     )
                 }
 
                 is UpdateState.ReadyToInstall -> {
                     Text(
-                        text = "インストーラーを起動しています...",
-                        color = Color.White,
+                        text = stringResource(R.string.update_launching),
+                        color = HanaBiColors.TextPrimary,
                         fontSize = 16.sp
                     )
                 }
 
                 is UpdateState.Error -> {
                     Text(
-                        text = "エラー: ${state.message}",
-                        color = Color(0xFFEF5350),
+                        text = stringResource(R.string.update_error, state.message),
+                        color = HanaBiColors.Error,
                         fontSize = 14.sp
                     )
                     LaunchedEffect(Unit) { firstFocus.requestFocus() }
@@ -196,11 +199,11 @@ fun UpdateScreen(
                         onClick = { viewModel.checkForUpdate() },
                         modifier = Modifier.focusRequester(firstFocus),
                         colors = ButtonDefaults.colors(
-                            containerColor = Color(0xFF2A2A2A),
-                            focusedContainerColor = Color(0xFF1565C0),
+                            containerColor = HanaBiColors.Surface,
+                            focusedContainerColor = HanaBiColors.Accent,
                         )
                     ) {
-                        Text("再試行", color = Color.White, fontSize = 16.sp)
+                        Text(stringResource(R.string.update_retry), color = HanaBiColors.TextPrimary, fontSize = 16.sp)
                     }
                 }
             }

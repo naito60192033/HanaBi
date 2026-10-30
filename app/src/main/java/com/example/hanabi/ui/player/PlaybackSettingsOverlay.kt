@@ -1,5 +1,7 @@
 package com.example.hanabi.ui.player
 
+import com.example.hanabi.data.PLAYBACK_SPEED_OPTIONS
+import com.example.hanabi.ui.theme.HanaBiColors
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -19,6 +21,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.res.stringResource
+import com.example.hanabi.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,7 +47,6 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Text
 import com.example.hanabi.viewmodel.TrackInfo
 
-private val SPEED_OPTIONS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
 private val DELAY_STEP_MS = 50L
 
 /** 再生設定サイドパネルオーバーレイ */
@@ -78,7 +81,7 @@ fun PlaybackSettingsOverlay(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f))
+                    .background(HanaBiColors.Scrim.copy(alpha = 0.4f))
             )
             // 設定パネル本体
             SettingsPanel(
@@ -126,12 +129,12 @@ private fun SettingsPanel(
             .width(360.dp)
             .fillMaxHeight()
             .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
-            .background(Color.Black.copy(alpha = 0.88f))
+            .background(HanaBiColors.Scrim.copy(alpha = 0.88f))
             .padding(top = 16.dp, bottom = 16.dp)
     ) {
         Text(
-            text = "再生設定",
-            color = Color.White,
+            text = stringResource(R.string.psettings_title),
+            color = HanaBiColors.TextPrimary,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
@@ -143,7 +146,7 @@ private fun SettingsPanel(
         ) {
             // 再生速度
             item {
-                SectionHeader("再生速度")
+                SectionHeader(stringResource(R.string.psettings_speed))
                 SpeedSection(
                     currentSpeed = playbackSpeed,
                     onSelect = onSpeedChange,
@@ -155,7 +158,7 @@ private fun SettingsPanel(
             // 音声トラック（2トラック以上ある場合のみ表示）
             if (audioTracks.size >= 2) {
                 item {
-                    SectionHeader("音声トラック")
+                    SectionHeader(stringResource(R.string.psettings_audio_track))
                     TrackSection(
                         tracks = audioTracks.map { it.label },
                         selectedIndex = selectedAudioIndex,
@@ -167,8 +170,8 @@ private fun SettingsPanel(
 
             // 字幕
             item {
-                SectionHeader("字幕")
-                val allSubtitleLabels = listOf("オフ") + subtitleTracks.map { it.label }
+                SectionHeader(stringResource(R.string.psettings_subtitle))
+                val allSubtitleLabels = listOf(stringResource(R.string.psettings_subtitle_off)) + subtitleTracks.map { it.label }
                 TrackSection(
                     tracks = allSubtitleLabels,
                     selectedIndex = selectedSubtitleIndex + 1, // -1=オフ → index 0
@@ -179,7 +182,7 @@ private fun SettingsPanel(
 
             // 音声ディレイ
             item {
-                SectionHeader("音声ディレイ")
+                SectionHeader(stringResource(R.string.psettings_audio_delay))
                 AudioDelaySection(
                     delayMs = audioDelayMs,
                     onDelayChange = onAudioDelayChange
@@ -189,7 +192,7 @@ private fun SettingsPanel(
 
             // 次エピソード自動再生
             item {
-                SectionHeader("次エピソード自動再生")
+                SectionHeader(stringResource(R.string.psettings_auto_next))
                 AutoPlayToggleSection(
                     enabled = autoPlayNext,
                     onToggle = onAutoPlayNextChange
@@ -203,7 +206,7 @@ private fun SettingsPanel(
 private fun SectionHeader(title: String) {
     Text(
         text = title,
-        color = Color.Gray,
+        color = HanaBiColors.TextSecondary,
         fontSize = 12.sp,
         modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
     )
@@ -216,7 +219,7 @@ private fun SectionDivider() {
             .fillMaxWidth()
             .height(1.dp)
             .padding(horizontal = 12.dp)
-            .background(Color.White.copy(alpha = 0.1f))
+            .background(HanaBiColors.TextPrimary.copy(alpha = 0.1f))
     )
     Spacer(modifier = Modifier.height(4.dp))
 }
@@ -233,21 +236,21 @@ private fun SpeedSection(
             .padding(horizontal = 12.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        items(SPEED_OPTIONS.size) { idx ->
-            val speed = SPEED_OPTIONS[idx]
+        items(PLAYBACK_SPEED_OPTIONS.size) { idx ->
+            val speed = PLAYBACK_SPEED_OPTIONS[idx]
             val isSelected = currentSpeed == speed
             val modifier = if (idx == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier
             Button(
                 onClick = { onSelect(speed) },
                 modifier = modifier,
                 colors = ButtonDefaults.colors(
-                    containerColor = if (isSelected) Color(0xFF1565C0) else Color(0xFF333333),
-                    focusedContainerColor = if (isSelected) Color(0xFF1976D2) else Color(0xFF555555),
+                    containerColor = if (isSelected) HanaBiColors.Accent else HanaBiColors.Surface,
+                    focusedContainerColor = if (isSelected) HanaBiColors.AccentFocused else HanaBiColors.SurfaceFocused,
                 )
             ) {
                 Text(
                     text = "${speed}x".replace(".0x", "x"),
-                    color = Color.White,
+                    color = HanaBiColors.TextPrimary,
                     fontSize = 14.sp
                 )
             }
@@ -273,13 +276,13 @@ private fun TrackSection(
                 onClick = { onSelect(index) },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.colors(
-                    containerColor = if (isSelected) Color(0xFF1565C0) else Color(0xFF333333),
-                    focusedContainerColor = if (isSelected) Color(0xFF1976D2) else Color(0xFF555555),
+                    containerColor = if (isSelected) HanaBiColors.Accent else HanaBiColors.Surface,
+                    focusedContainerColor = if (isSelected) HanaBiColors.AccentFocused else HanaBiColors.SurfaceFocused,
                 )
             ) {
                 Text(
                     text = label,
-                    color = Color.White,
+                    color = HanaBiColors.TextPrimary,
                     fontSize = 14.sp,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -312,17 +315,17 @@ private fun AudioDelaySection(
                     } else false
                 },
             colors = ButtonDefaults.colors(
-                containerColor = Color(0xFF333333),
-                focusedContainerColor = Color(0xFF555555),
+                containerColor = HanaBiColors.Surface,
+                focusedContainerColor = HanaBiColors.SurfaceFocused,
             )
         ) {
-            Text("−", color = Color.White, fontSize = 18.sp)
+            Text("−", color = HanaBiColors.TextPrimary, fontSize = 18.sp)
         }
 
         // 現在値表示
         Text(
             text = "${delayMs}ms",
-            color = Color.White,
+            color = HanaBiColors.TextPrimary,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(2f),
@@ -341,16 +344,16 @@ private fun AudioDelaySection(
                     } else false
                 },
             colors = ButtonDefaults.colors(
-                containerColor = Color(0xFF333333),
-                focusedContainerColor = Color(0xFF555555),
+                containerColor = HanaBiColors.Surface,
+                focusedContainerColor = HanaBiColors.SurfaceFocused,
             )
         ) {
-            Text("+", color = Color.White, fontSize = 18.sp)
+            Text("+", color = HanaBiColors.TextPrimary, fontSize = 18.sp)
         }
     }
     Text(
-        text = "-500ms 〜 +500ms（50ms 刻み）",
-        color = Color.Gray,
+        text = stringResource(R.string.psettings_delay_range),
+        color = HanaBiColors.TextSecondary,
         fontSize = 10.sp,
         modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp)
     )
@@ -371,21 +374,21 @@ private fun AutoPlayToggleSection(
             onClick = { onToggle(false) },
             modifier = Modifier.weight(1f),
             colors = ButtonDefaults.colors(
-                containerColor = if (!enabled) Color(0xFF1565C0) else Color(0xFF333333),
-                focusedContainerColor = if (!enabled) Color(0xFF1976D2) else Color(0xFF555555),
+                containerColor = if (!enabled) HanaBiColors.Accent else HanaBiColors.Surface,
+                focusedContainerColor = if (!enabled) HanaBiColors.AccentFocused else HanaBiColors.SurfaceFocused,
             )
         ) {
-            Text("OFF", color = Color.White, fontSize = 14.sp)
+            Text(stringResource(R.string.psettings_off), color = HanaBiColors.TextPrimary, fontSize = 14.sp)
         }
         Button(
             onClick = { onToggle(true) },
             modifier = Modifier.weight(1f),
             colors = ButtonDefaults.colors(
-                containerColor = if (enabled) Color(0xFF1565C0) else Color(0xFF333333),
-                focusedContainerColor = if (enabled) Color(0xFF1976D2) else Color(0xFF555555),
+                containerColor = if (enabled) HanaBiColors.Accent else HanaBiColors.Surface,
+                focusedContainerColor = if (enabled) HanaBiColors.AccentFocused else HanaBiColors.SurfaceFocused,
             )
         ) {
-            Text("ON", color = Color.White, fontSize = 14.sp)
+            Text(stringResource(R.string.psettings_on), color = HanaBiColors.TextPrimary, fontSize = 14.sp)
         }
     }
 }
@@ -408,7 +411,7 @@ fun NextEpisodeBanner(
             modifier = Modifier
                 .padding(32.dp)
                 .background(
-                    Color.Black.copy(alpha = 0.85f),
+                    HanaBiColors.Scrim.copy(alpha = 0.85f),
                     shape = RoundedCornerShape(12.dp)
                 )
                 .padding(20.dp),
@@ -416,13 +419,13 @@ fun NextEpisodeBanner(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "次のエピソード",
-                color = Color.Gray,
+                text = stringResource(R.string.psettings_next_episode),
+                color = HanaBiColors.TextSecondary,
                 fontSize = 12.sp
             )
             Text(
                 text = episodeName,
-                color = Color.White,
+                color = HanaBiColors.TextPrimary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -430,21 +433,21 @@ fun NextEpisodeBanner(
                 Button(
                     onClick = onDismiss,
                     colors = ButtonDefaults.colors(
-                        containerColor = Color(0xFF333333),
-                        focusedContainerColor = Color(0xFF555555),
+                        containerColor = HanaBiColors.Surface,
+                        focusedContainerColor = HanaBiColors.SurfaceFocused,
                     )
                 ) {
-                    Text("閉じる", color = Color.White)
+                    Text(stringResource(R.string.psettings_close), color = HanaBiColors.TextPrimary)
                 }
                 Button(
                     onClick = onPlay,
                     modifier = Modifier.focusRequester(playFocus),
                     colors = ButtonDefaults.colors(
-                        containerColor = Color(0xFF1565C0),
-                        focusedContainerColor = Color(0xFF1976D2),
+                        containerColor = HanaBiColors.Accent,
+                        focusedContainerColor = HanaBiColors.AccentFocused,
                     )
                 ) {
-                    Text("再生", color = Color.White)
+                    Text(stringResource(R.string.psettings_play), color = HanaBiColors.TextPrimary)
                 }
             }
         }

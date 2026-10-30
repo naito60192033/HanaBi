@@ -1,5 +1,6 @@
 package com.example.hanabi.ui.settings
 
+import com.example.hanabi.ui.theme.HanaBiColors
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -18,6 +19,8 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.res.stringResource
+import com.example.hanabi.R
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,7 +62,7 @@ fun SettingsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(HanaBiColors.ScreenBackground)
             .padding(horizontal = 96.dp, vertical = 48.dp)
     ) {
         Column(
@@ -67,41 +70,41 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             Text(
-                "NAS接続設定",
+                stringResource(R.string.settings_nas_title),
                 style = MaterialTheme.typography.headlineMedium,
-                color = Color.White
+                color = HanaBiColors.TextPrimary
             )
 
             // ホスト名入力
             SettingsTextField(
-                label = "ホスト名 / IPアドレス",
+                label = stringResource(R.string.settings_host_label),
                 value = host,
                 onValueChange = { host = it },
-                placeholder = "例: 192.168.1.100 または NAS名"
+                placeholder = stringResource(R.string.settings_host_placeholder)
             )
 
             // 共有フォルダ名入力
             SettingsTextField(
-                label = "共有フォルダ名",
+                label = stringResource(R.string.settings_share_label),
                 value = share,
                 onValueChange = { share = it },
-                placeholder = "例: video"
+                placeholder = stringResource(R.string.settings_share_placeholder)
             )
 
             // ユーザー名入力
             SettingsTextField(
-                label = "ユーザー名（省略可）",
+                label = stringResource(R.string.settings_user_label),
                 value = username,
                 onValueChange = { username = it },
-                placeholder = "例: admin"
+                placeholder = stringResource(R.string.settings_user_placeholder)
             )
 
             // パスワード入力
             SettingsTextField(
-                label = "パスワード（省略可）",
+                label = stringResource(R.string.settings_password_label),
                 value = password,
                 onValueChange = { password = it },
-                placeholder = "パスワード",
+                placeholder = stringResource(R.string.settings_password_placeholder),
                 isPassword = true,
                 maskValue = !passwordVisible,
                 nextFocusDown = passwordVisibilityFocusRequester
@@ -123,15 +126,15 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.focusRequester(saveButtonFocusRequester)
                 ) {
-                    Text("保存して戻る")
+                    Text(stringResource(R.string.settings_save_and_back))
                 }
                 OutlinedButton(onClick = onBack) {
-                    Text("キャンセル")
+                    Text(stringResource(R.string.settings_cancel))
                 }
                 OutlinedButton(
                     onClick = { viewModel.testConnection(host, share, username, password) }
                 ) {
-                    Text("接続テスト")
+                    Text(stringResource(R.string.settings_connection_test))
                 }
             }
 
@@ -139,11 +142,11 @@ fun SettingsScreen(
             when (val st = testState) {
                 is ConnectionTestState.Idle -> {}
                 is ConnectionTestState.Testing ->
-                    Text("接続中…", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.settings_connecting), color = HanaBiColors.TextSecondary, style = MaterialTheme.typography.bodyMedium)
                 is ConnectionTestState.Success ->
-                    Text("接続できました（${st.count} 件）", color = Color(0xFF4ADE80), style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.settings_connected, st.count), color = HanaBiColors.Success, style = MaterialTheme.typography.bodyMedium)
                 is ConnectionTestState.Failure ->
-                    Text(st.message, color = Color.Red, style = MaterialTheme.typography.bodyMedium)
+                    Text(st.message, color = HanaBiColors.Error, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -174,7 +177,7 @@ private fun SettingsTextField(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+        Text(label, color = HanaBiColors.TextSecondary, style = MaterialTheme.typography.bodySmall)
 
         // 非編集時はBoxがD-padフォーカスを受け取り、決定ボタンで入力モードへ移行する
         Box(
@@ -182,7 +185,7 @@ private fun SettingsTextField(
                 .fillMaxWidth()
                 .then(
                     if (isFocused && !isEditing)
-                        Modifier.border(2.dp, Color.White, androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                        Modifier.border(2.dp, HanaBiColors.TextPrimary, androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
                     else
                         Modifier
                 )
@@ -202,17 +205,17 @@ private fun SettingsTextField(
             OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
-                placeholder = { Text(placeholder, color = Color.DarkGray) },
+                placeholder = { Text(placeholder, color = HanaBiColors.TextHint) },
                 visualTransformation = if (maskValue) PasswordVisualTransformation() else VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = if (isPassword) KeyboardType.Password else KeyboardType.Text
                 ),
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedBorderColor = Color.White,
-                    unfocusedBorderColor = Color.Gray,
+                    focusedTextColor = HanaBiColors.TextPrimary,
+                    unfocusedTextColor = HanaBiColors.TextPrimary,
+                    focusedBorderColor = HanaBiColors.TextPrimary,
+                    unfocusedBorderColor = HanaBiColors.TextSecondary,
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -248,14 +251,14 @@ private fun PasswordVisibilityToggle(
     )
     val containerColor by animateColorAsState(
         targetValue = when {
-            isFocused -> Color.White.copy(alpha = 0.16f)
-            else      -> Color.White.copy(alpha = 0.05f)
+            isFocused -> HanaBiColors.TextPrimary.copy(alpha = 0.16f)
+            else      -> HanaBiColors.TextPrimary.copy(alpha = 0.05f)
         },
         animationSpec = tween(150),
         label = "container"
     )
     val borderColor by animateColorAsState(
-        targetValue = if (isFocused) Color.White else Color.White.copy(alpha = 0.18f),
+        targetValue = if (isFocused) HanaBiColors.TextPrimary else HanaBiColors.TextPrimary.copy(alpha = 0.18f),
         animationSpec = tween(150),
         label = "border"
     )
@@ -287,12 +290,12 @@ private fun PasswordVisibilityToggle(
             Icon(
                 imageVector = if (visible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
                 contentDescription = null,
-                tint = Color.White,
+                tint = HanaBiColors.TextPrimary,
                 modifier = Modifier.size(22.dp)
             )
             Text(
-                text = "パスワードを表示",
-                color = Color.White,
+                text = stringResource(R.string.settings_show_password),
+                color = HanaBiColors.TextPrimary,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
@@ -305,7 +308,7 @@ private fun PasswordVisibilityToggle(
 @Composable
 private fun PillSwitch(checked: Boolean) {
     val trackColor by animateColorAsState(
-        targetValue = if (checked) Color(0xFF60A5FA) else Color.White.copy(alpha = 0.28f),
+        targetValue = if (checked) HanaBiColors.SwitchOn else HanaBiColors.TextPrimary.copy(alpha = 0.28f),
         animationSpec = tween(180),
         label = "track"
     )
@@ -326,7 +329,7 @@ private fun PillSwitch(checked: Boolean) {
                 .offset(x = thumbOffset)
                 .size(18.dp)
                 .clip(CircleShape)
-                .background(Color.White)
+                .background(HanaBiColors.TextPrimary)
         )
     }
 }
