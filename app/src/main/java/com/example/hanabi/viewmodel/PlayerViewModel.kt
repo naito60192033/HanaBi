@@ -12,7 +12,9 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -81,7 +83,20 @@ class PlayerViewModel @Inject constructor(
         })
         // 再生中のスリープ防止（CPU Wake Lock + Wi-Fi Lock を自動管理）
         .setWakeMode(C.WAKE_MODE_NETWORK)
+        // NAS 越しの再生を安定させるため先読みを長めに取る（バイト上限は既定のままメモリ保護）
+        .setLoadControl(
+            DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    /* minBufferMs = */ 30_000,
+                    /* maxBufferMs = */ 120_000,
+                    /* bufferForPlaybackMs = */ 2_500,
+                    /* bufferForPlaybackAfterRebufferMs = */ 5_000
+                )
+                .build()
+        )
         .build()
+        // ネットワーク越しのシークを速くするためキーフレームに合わせる
+        .also { it.setSeekParameters(SeekParameters.CLOSEST_SYNC) }
 
     private val _savedProgress = MutableStateFlow<PlaybackProgress?>(null)
     val savedProgress: StateFlow<PlaybackProgress?> = _savedProgress
@@ -202,6 +217,8 @@ class PlayerViewModel @Inject constructor(
 
     /** 再生位置を反映する */
     private fun updatePosition() {
+        // シーク保留中は表示を目標位置のままにする（古い位置で上書きしない）
+        if (pendingSeekMs != null) return
         val pos = player.currentPosition.coerceAtLeast(0L)
         _currentPositionMs.value = pos
         if (_playerError.value == null && pos > 0) lastValidPositionMs = pos
@@ -251,6 +268,7 @@ class PlayerViewModel @Inject constructor(
      */
     fun retryPlayback(resume: Boolean) {
         _playerError.value = null
+        cancelPendingSeek()
         player.seekTo(lastValidPositionMs)
         player.prepare()
         if (resume) player.play()
@@ -274,6 +292,7 @@ class PlayerViewModel @Inject constructor(
 
     /** メディアをセットして準備する（再生はまだ開始しない） */
     fun prepare(smbPath: String) {
+        cancelPendingSeek()
         currentSmbPath = smbPath
         _videoTitle.value = smbPath.substringAfterLast('/').let { filename ->
             if ('.' in filename) filename.substringBeforeLast('.') else filename
@@ -325,6 +344,7 @@ class PlayerViewModel @Inject constructor(
     /** 最初から再生 */
     fun playFromBeginning() {
         _savedProgress.value = null
+        cancelPendingSeek()
         player.seekTo(0)
         player.play()
         startProgressSaving()
@@ -334,6 +354,7 @@ class PlayerViewModel @Inject constructor(
     fun resumePlayback() {
         val position = _savedProgress.value?.positionMs ?: 0L
         _savedProgress.value = null
+        cancelPendingSeek()
         player.seekTo(position)
         player.play()
         startProgressSaving()
@@ -343,18 +364,35 @@ class PlayerViewModel @Inject constructor(
     val seekForwardMs: Long get() = playbackPrefs.seekForwardSec * 1000L
     val seekBackwardMs: Long get() = playbackPrefs.seekBackwardSec * 1000L
 
+    /** デバウンス中の目標位置（null=保留なし） */
+    private var pendingSeekMs: Long? = null
+    private var seekJob: Job? = null
+
+    /** 保留中の目標位置があればそれ、なければ現在位置 */
+    private fun basePositionMs(): Long = pendingSeekMs ?: player.currentPosition
+
+    /** 目標位置を即表示に反映し、実際の seekTo は最後の操作から 300ms 後に 1 回だけ行う */
+    private fun requestSeek(targetMs: Long) {
+        val duration = player.duration
+        val clamped = (if (duration > 0) targetMs.coerceAtMost(duration) else targetMs).coerceAtLeast(0L)
+        pendingSeekMs = clamped
+        _currentPositionMs.value = clamped
+        seekJob?.cancel()
+        seekJob = viewModelScope.launch {
+            delay(SEEK_DEBOUNCE_MS)
+            pendingSeekMs = null
+            player.seekTo(clamped)
+        }
+    }
+
     /** 早送り */
     fun seekForward(ms: Long = playbackPrefs.seekForwardSec * 1000L) {
-        val current = player.currentPosition
-        val duration = player.duration
-        val newPos = if (duration > 0) (current + ms).coerceAtMost(duration) else current + ms
-        player.seekTo(newPos)
+        requestSeek(basePositionMs() + ms)
     }
 
     /** 巻き戻し */
     fun seekBackward(ms: Long = playbackPrefs.seekBackwardSec * 1000L) {
-        val newPos = (player.currentPosition - ms).coerceAtLeast(0L)
-        player.seekTo(newPos)
+        requestSeek(basePositionMs() - ms)
     }
 
     /** 再生/一時停止トグル。現在の再生状態を返す（true=再生開始、false=一時停止） */
@@ -374,17 +412,19 @@ class PlayerViewModel @Inject constructor(
      */
     fun seekToChapterOrSkip(forward: Boolean): ChapterJumpInfo {
         val chapterList = _chapters.value
-        val currentPos = player.currentPosition
+        val currentPos = basePositionMs()
         if (chapterList.isNotEmpty()) {
             if (forward) {
                 val next = chapterList.firstOrNull { it.positionMs > currentPos + 1000 }
                 if (next != null) {
+                    cancelPendingSeek()
                     player.seekTo(next.positionMs)
                     return ChapterJumpInfo(true, true, next.title?.toString())
                 }
             } else {
                 val prev = chapterList.lastOrNull { it.positionMs < currentPos - 1000 }
                 if (prev != null) {
+                    cancelPendingSeek()
                     player.seekTo(prev.positionMs)
                     return ChapterJumpInfo(false, true, prev.title?.toString())
                 }
@@ -392,6 +432,13 @@ class PlayerViewModel @Inject constructor(
         }
         if (forward) seekForward(10 * 60 * 1000L) else seekBackward(10 * 60 * 1000L)
         return ChapterJumpInfo(forward, false, null)
+    }
+
+    /** 保留中のデバウンスシークを破棄する（別の seekTo を直接行う前に呼ぶ） */
+    private fun cancelPendingSeek() {
+        seekJob?.cancel()
+        seekJob = null
+        pendingSeekMs = null
     }
 
     /** 再生速度を設定・永続化 */
@@ -564,6 +611,11 @@ class PlayerViewModel @Inject constructor(
                 setPreferredTextLanguage(subtitleLang)
             }
         }.build()
+    }
+
+    companion object {
+        /** 連打シークのデバウンス時間 */
+        private const val SEEK_DEBOUNCE_MS = 300L
     }
 
     override fun onCleared() {
