@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.navigation.compose.NavHost
@@ -15,6 +16,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.compose.runtime.remember
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.hanabi.ui.KeyHandlerRegistry
+import com.example.hanabi.ui.LocalKeyHandlers
 import com.example.hanabi.ui.browser.BrowserScreen
 import com.example.hanabi.ui.player.PlayerScreen
 import com.example.hanabi.ui.settings.AppSettingsScreen
@@ -28,31 +31,28 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    /** Activity 最上位のキーハンドラー登録口（画面が ActivityKeyHandler 経由で登録する） */
+    private val keyHandlers = KeyHandlerRegistry()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            HanaBiTheme {
-                HanaBiNavHost()
+            CompositionLocalProvider(LocalKeyHandlers provides keyHandlers) {
+                HanaBiTheme {
+                    HanaBiNavHost()
+                }
             }
         }
     }
 
     /**
      * Activity最上位でキーイベントを捕捉する。
-     * PlayerScreenが登録したハンドラーを優先処理することで、
+     * 画面が登録したハンドラーを優先処理することで、
      * ExoPlayer内部やMediaSessionに横取りされる前に中央ボタン等を処理できる。
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (playerKeyHandler?.invoke(event) == true) return true
-        if (menuKeyHandler?.invoke(event) == true) return true
+        if (keyHandlers.dispatch(event)) return true
         return super.dispatchKeyEvent(event)
-    }
-
-    companion object {
-        /** PlayerScreen がアクティブな間だけ登録されるキーハンドラー */
-        var playerKeyHandler: ((KeyEvent) -> Boolean)? = null
-        /** BrowserScreen がアクティブな間だけ登録されるメニューキーハンドラー */
-        var menuKeyHandler: ((KeyEvent) -> Boolean)? = null
     }
 }
 

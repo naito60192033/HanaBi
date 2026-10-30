@@ -38,53 +38,12 @@ import com.example.hanabi.player.Chapter
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.*
 import com.example.hanabi.MainActivity
+import com.example.hanabi.ui.ActivityKeyHandler
 import com.example.hanabi.data.db.PlaybackProgress
 import com.example.hanabi.viewmodel.ChapterJumpInfo
 import com.example.hanabi.viewmodel.PlayerViewModel
 import kotlinx.coroutines.delay
 
-private enum class SeekDirection { FORWARD, BACKWARD }
-
-/**
- * シークイベント。
- * totalMs: 連続操作で加算された累積シーク量（表示用）
- * id: 同方向の連続押しでも LaunchedEffect を再起動させるための一意キー
- */
-private data class SeekEvent(val direction: SeekDirection, val totalMs: Long, val id: Long)
-
-/** チャプタージャンプ表示イベント */
-private data class ChapterJumpEvent(
-    val forward: Boolean,
-    val isChapter: Boolean,
-    val chapterName: String?,
-    val id: Long = System.currentTimeMillis()
-)
-
-/** 再生/一時停止トグル表示イベント */
-private data class PlayPauseEvent(
-    val isPlaying: Boolean,
-    val id: Long = System.currentTimeMillis()
-)
-
-/**
- * 連続スキップ時の累積量を管理するクラス。
- */
-private class SeekAccumulator {
-    var totalMs: Long = 0L
-    var direction: SeekDirection? = null
-
-    fun accumulate(dir: SeekDirection, amount: Long): Long {
-        if (direction != dir) totalMs = 0L
-        direction = dir
-        totalMs += amount
-        return totalMs
-    }
-
-    fun reset() {
-        totalMs = 0L
-        direction = null
-    }
-}
 
 /** 動画プレイヤー画面 */
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -157,19 +116,10 @@ fun PlayerScreen(
     // 再生開始済みフラグ
     var playbackInitiated by remember { mutableStateOf(false) }
 
-    // 再開ダイアログ表示中かを playerKeyHandler から参照するための状態
-    val showResumeDialog = remember { mutableStateOf(false) }
+    // 再開ダイアログ・エラーダイアログ・次エピソードバナーの表示有無（キー判定・BackHandler で参照）
     val shouldShowResumeDialog = isPrepared && savedProgress != null &&
         !savedProgress!!.isFinished && savedProgress!!.positionMs > 30_000
-    SideEffect { showResumeDialog.value = shouldShowResumeDialog }
-
-    // エラーダイアログ表示中かを playerKeyHandler / BackHandler から参照するための状態
-    val showErrorDialog = remember { mutableStateOf(false) }
-    SideEffect { showErrorDialog.value = playerError != null }
-
-    // 次エピソードバナー表示中かを playerKeyHandler から参照するための状態
-    val showNextEpisodeBannerState = remember { mutableStateOf(false) }
-    SideEffect { showNextEpisodeBannerState.value = showNextEpisodeBanner }
+    val showErrorDialog = playerError != null
 
     // コントローラー自動非表示（再生中は3秒後に隠す）
     LaunchedEffect(lastKeyPressTime.longValue) {
@@ -201,111 +151,63 @@ fun PlayerScreen(
     // ---------------------------------------------------------------
     // Activity 最上位でキーを捕捉
     // ---------------------------------------------------------------
-    DisposableEffect(Unit) {
-        // 左右キー・早送り/巻き戻しキー共通のシーク処理
-        fun doSeek(direction: SeekDirection) {
-            val forward = direction == SeekDirection.FORWARD
-            if (forward) viewModel.seekForward() else viewModel.seekBackward()
-            val total = accumulator.accumulate(
-                direction,
-                if (forward) viewModel.seekForwardMs else viewModel.seekBackwardMs
+    // 左右キー・早送り/巻き戻しキー共通のシーク処理
+    fun doSeek(direction: SeekDirection) {
+        val forward = direction == SeekDirection.FORWARD
+        if (forward) viewModel.seekForward() else viewModel.seekBackward()
+        val total = accumulator.accumulate(
+            direction,
+            if (forward) viewModel.seekForwardMs else viewModel.seekBackwardMs
+        )
+        seekEvent.value = SeekEvent(
+            direction = direction,
+            totalMs = total,
+            id = System.currentTimeMillis()
+        )
+    }
+    fun doChapterJump(forward: Boolean) {
+        val info: ChapterJumpInfo = viewModel.seekToChapterOrSkip(forward)
+        chapterJumpEvent.value = ChapterJumpEvent(
+            forward = forward,
+            isChapter = info.isChapter,
+            chapterName = info.chapterName,
+            id = System.currentTimeMillis()
+        )
+    }
+    // ActivityKeyHandler は常に最新のラムダを呼ぶので、ここから最新の状態を直接読める。
+    // 自動次再生の popUpTo で新旧画面の登録・解除順が前後しても、レジストリが identity で解除する。
+    ActivityKeyHandler { event ->
+        if (event.action != KeyEvent.ACTION_DOWN) return@ActivityKeyHandler false
+        val action = playerKeyAction(
+            event.keyCode,
+            PlayerKeyState(
+                showResumeDialog = shouldShowResumeDialog,
+                showErrorDialog = showErrorDialog,
+                showNextEpisodeBanner = showNextEpisodeBanner,
+                showSettingsOverlay = showSettingsOverlay.value
             )
-            seekEvent.value = SeekEvent(
-                direction = direction,
-                totalMs = total,
-                id = System.currentTimeMillis()
-            )
+        ) ?: return@ActivityKeyHandler false
+        when (action) {
+            PlayerKeyAction.SeekForward -> doSeek(SeekDirection.FORWARD)
+            PlayerKeyAction.SeekBackward -> doSeek(SeekDirection.BACKWARD)
+            PlayerKeyAction.Play -> viewModel.play()
+            PlayerKeyAction.Pause -> viewModel.pause()
+            PlayerKeyAction.TogglePlayPause -> viewModel.togglePlayPause()
+            PlayerKeyAction.OpenSettings -> showSettingsOverlay.value = true
+            PlayerKeyAction.CloseSettings -> showSettingsOverlay.value = false
+            PlayerKeyAction.NextChapter -> doChapterJump(true)
+            PlayerKeyAction.PreviousChapter -> doChapterJump(false)
         }
-        val handler: (KeyEvent) -> Boolean = { event ->
-            if (event.action == KeyEvent.ACTION_DOWN) {
-                when {
-                    showResumeDialog.value -> false
-                    showErrorDialog.value -> false
-                    showNextEpisodeBannerState.value -> false
-                    showSettingsOverlay.value -> {
-                        when (event.keyCode) {
-                            KeyEvent.KEYCODE_MENU -> {
-                                showSettingsOverlay.value = false
-                                true
-                            }
-                            else -> false
-                        }
-                    }
-                    else -> {
-                        val handled = when (event.keyCode) {
-                            KeyEvent.KEYCODE_DPAD_RIGHT,
-                            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
-                                doSeek(SeekDirection.FORWARD)
-                                true
-                            }
-                            KeyEvent.KEYCODE_DPAD_LEFT,
-                            KeyEvent.KEYCODE_MEDIA_REWIND -> {
-                                doSeek(SeekDirection.BACKWARD)
-                                true
-                            }
-                            KeyEvent.KEYCODE_MEDIA_PLAY -> {
-                                viewModel.play()
-                                true
-                            }
-                            KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                                viewModel.pause()
-                                true
-                            }
-                            KeyEvent.KEYCODE_DPAD_CENTER,
-                            KeyEvent.KEYCODE_ENTER,
-                            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                                viewModel.togglePlayPause()
-                                true
-                            }
-                            KeyEvent.KEYCODE_MENU -> {
-                                showSettingsOverlay.value = true
-                                true
-                            }
-                            KeyEvent.KEYCODE_DPAD_UP -> {
-                                val info: ChapterJumpInfo = viewModel.seekToChapterOrSkip(true)
-                                chapterJumpEvent.value = ChapterJumpEvent(
-                                    forward = true,
-                                    isChapter = info.isChapter,
-                                    chapterName = info.chapterName,
-                                    id = System.currentTimeMillis()
-                                )
-                                true
-                            }
-                            KeyEvent.KEYCODE_DPAD_DOWN -> {
-                                val info: ChapterJumpInfo = viewModel.seekToChapterOrSkip(false)
-                                chapterJumpEvent.value = ChapterJumpEvent(
-                                    forward = false,
-                                    isChapter = info.isChapter,
-                                    chapterName = info.chapterName,
-                                    id = System.currentTimeMillis()
-                                )
-                                true
-                            }
-                            else -> false
-                        }
-                        // 自分が処理したキーのときだけコントローラーを表示する。
-                        // BACK 等のここで処理しないキーで showController を true にすると、
-                        // BackHandler 側の判定（コントローラー表示中なら閉じるだけ）と競合して
-                        // 「再生中の戻るボタンで前画面に戻れない」現象になる。
-                        if (handled) {
-                            lastKeyPressTime.longValue = System.currentTimeMillis()
-                            showController.value = true
-                        }
-                        handled
-                    }
-                }
-            } else false
+        // 自分が処理したキーのときだけコントローラーを表示する。
+        // BACK 等のここで処理しないキーで showController を true にすると、
+        // BackHandler 側の判定（コントローラー表示中なら閉じるだけ）と競合して
+        // 「再生中の戻るボタンで前画面に戻れない」現象になる。
+        // 設定オーバーレイを閉じるキー（CloseSettings）では従来どおり表示しない。
+        if (action != PlayerKeyAction.CloseSettings) {
+            lastKeyPressTime.longValue = System.currentTimeMillis()
+            showController.value = true
         }
-        MainActivity.playerKeyHandler = handler
-        onDispose {
-            // 自動次再生で popUpTo + navigate した際は、新しい PlayerScreen の
-            // DisposableEffect が先に走ってからこの onDispose が実行される。
-            // 既に新しいハンドラに差し替わっている場合は何もしない（さもないと
-            // 新しい画面で十字キー・決定が効かなくなる）。
-            if (MainActivity.playerKeyHandler === handler) {
-                MainActivity.playerKeyHandler = null
-            }
-        }
+        true
     }
 
     // 次エピソード自動遷移イベントを受信
@@ -322,7 +224,7 @@ fun PlayerScreen(
 
     BackHandler {
         when {
-            showErrorDialog.value -> {
+            showErrorDialog -> {
                 // エラー表示中は「戻る」と同じ動作
                 onBack()
             }
@@ -475,367 +377,5 @@ fun PlayerScreen(
                 onDismiss = viewModel::dismissNextEpisodeBanner
             )
         }
-    }
-}
-
-/** YouTube風プレイヤーコントロールオーバーレイ */
-@Composable
-private fun PlayerControlsOverlay(
-    visible: Boolean,
-    title: String,
-    currentPositionMs: Long,
-    durationMs: Long,
-    chapters: List<Chapter>,
-    playbackSpeed: Float,
-) {
-    val currentChapterName = remember(chapters, currentPositionMs) {
-        chapters.lastOrNull { it.positionMs <= currentPositionMs }?.title
-    }
-    val progress = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
-
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(animationSpec = tween(250)),
-        exit = fadeOut(animationSpec = tween(300))
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            // 上部: タイトル + チャプター名
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Black.copy(alpha = 0.75f), Color.Transparent)
-                        )
-                    )
-                    .padding(horizontal = 32.dp, vertical = 24.dp)
-            ) {
-                Column {
-                    Text(
-                        text = title,
-                        color = Color.White,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (currentChapterName != null) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = currentChapterName,
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-
-            // 下部: プログレスバー + 時間表示
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
-                        )
-                    )
-                    .padding(horizontal = 32.dp)
-                    .padding(top = 48.dp, bottom = 28.dp)
-            ) {
-                // プログレスバー（Canvas）
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(12.dp)
-                ) {
-                    val barH = 4.dp.toPx()
-                    val barTop = (size.height - barH) / 2
-
-                    // トラック背景
-                    drawRect(
-                        color = Color.White.copy(alpha = 0.3f),
-                        topLeft = Offset(0f, barTop),
-                        size = size.copy(height = barH)
-                    )
-                    // 再生済み部分（YouTube風レッド）
-                    if (progress > 0f) {
-                        drawRect(
-                            color = Color(0xFFFF0000),
-                            topLeft = Offset(0f, barTop),
-                            size = size.copy(width = size.width * progress, height = barH)
-                        )
-                    }
-                    // チャプターマーカー（縦線）
-                    if (durationMs > 0) {
-                        val markerW = 2.dp.toPx()
-                        for (chapter in chapters) {
-                            if (chapter.positionMs <= 0 || chapter.positionMs >= durationMs) continue
-                            val x = size.width * (chapter.positionMs.toFloat() / durationMs)
-                            drawRect(
-                                color = Color.Black.copy(alpha = 0.9f),
-                                topLeft = Offset(x - markerW / 2, barTop),
-                                size = size.copy(width = markerW, height = barH)
-                            )
-                        }
-                    }
-                    // サム（白丸）
-                    if (progress > 0f && progress < 1f) {
-                        drawCircle(
-                            color = Color.White,
-                            radius = 7.dp.toPx(),
-                            center = Offset(size.width * progress, size.height / 2)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = formatTime(currentPositionMs),
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (playbackSpeed != 1.0f) {
-                            Text(
-                                text = "${playbackSpeed}x".replace(".0x", "x"),
-                                color = Color.White.copy(alpha = 0.7f),
-                                fontSize = 13.sp
-                            )
-                        }
-                        Text(
-                            text = formatTime(durationMs),
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 14.sp
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** 再生/一時停止トグルインジケーター（中央に円形オーバーレイ） */
-@Composable
-private fun PlayPauseIndicator(event: PlayPauseEvent, onDismiss: () -> Unit) {
-    LaunchedEffect(event.id) {
-        delay(700)
-        onDismiss()
-    }
-
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(96.dp)
-                .background(Color.Black.copy(alpha = 0.55f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = if (event.isPlaying) "▶" else "❚❚",
-                fontSize = 40.sp,
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-}
-
-/** チャプタージャンプインジケーター */
-@Composable
-private fun ChapterJumpIndicator(event: ChapterJumpEvent, onDismiss: () -> Unit) {
-    LaunchedEffect(event.id) {
-        delay(1200)
-        onDismiss()
-    }
-
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(14.dp))
-                .padding(horizontal = 28.dp, vertical = 18.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = if (event.forward) "▲" else "▼",
-                fontSize = 26.sp,
-                color = Color.White
-            )
-            Text(
-                text = when {
-                    event.isChapter && !event.chapterName.isNullOrBlank() -> event.chapterName
-                    event.isChapter -> if (event.forward) "次のチャプター" else "前のチャプター"
-                    else -> if (event.forward) "+10分" else "−10分"
-                },
-                fontSize = 16.sp,
-                color = Color.White,
-                fontWeight = FontWeight.Medium
-            )
-        }
-    }
-}
-
-/** シークインジケーターオーバーレイ（左右に表示、累積秒数を反映） */
-@Composable
-private fun SeekIndicator(seekEvent: SeekEvent, onDismiss: () -> Unit) {
-    LaunchedEffect(seekEvent.id) {
-        delay(700)
-        onDismiss()
-    }
-
-    val isForward = seekEvent.direction == SeekDirection.FORWARD
-    val seconds = seekEvent.totalMs / 1000
-
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = if (isForward) Alignment.CenterEnd else Alignment.CenterStart
-    ) {
-        Column(
-            modifier = Modifier
-                .width(130.dp)
-                .fillMaxHeight(0.4f)
-                .padding(
-                    start = if (!isForward) 32.dp else 0.dp,
-                    end = if (isForward) 32.dp else 0.dp
-                )
-                .background(
-                    color = Color.Black.copy(alpha = 0.55f),
-                    shape = RoundedCornerShape(20.dp)
-                ),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = if (isForward) "▶▶" else "◀◀",
-                fontSize = 38.sp,
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = if (isForward) "+${seconds}秒" else "−${seconds}秒",
-                fontSize = 18.sp,
-                color = Color.White,
-                fontWeight = FontWeight.Medium
-            )
-        }
-    }
-}
-
-/** 続きから再生するか確認するダイアログ */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun ResumeDialog(
-    progress: PlaybackProgress,
-    onResume: () -> Unit,
-    onPlayFromBeginning: () -> Unit
-) {
-    val resumeFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { resumeFocusRequester.requestFocus() }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.7f)),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "前回の続きから再生しますか？",
-                style = MaterialTheme.typography.headlineSmall,
-                color = Color.White
-            )
-            Text(
-                text = "再生位置: ${formatTime(progress.positionMs)} / ${formatTime(progress.durationMs)}",
-                color = Color.Gray
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Button(
-                    onClick = onResume,
-                    modifier = Modifier.focusRequester(resumeFocusRequester)
-                ) {
-                    Text("続きから再生")
-                }
-                OutlinedButton(onClick = onPlayFromBeginning) {
-                    Text("最初から再生")
-                }
-            }
-        }
-    }
-}
-
-/** 再生エラーダイアログ（ResumeDialog と同じ見た目・フォーカス方式） */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun PlayerErrorDialog(
-    message: String,
-    onRetry: () -> Unit,
-    onBack: () -> Unit
-) {
-    val retryFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { retryFocusRequester.requestFocus() }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.7f)),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = message,
-                style = MaterialTheme.typography.headlineSmall,
-                color = Color.White
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Button(
-                    onClick = onRetry,
-                    modifier = Modifier.focusRequester(retryFocusRequester)
-                ) {
-                    Text("再試行")
-                }
-                OutlinedButton(onClick = onBack) {
-                    Text("戻る")
-                }
-            }
-        }
-    }
-}
-
-/** ミリ秒を MM:SS 形式にフォーマット */
-private fun formatTime(ms: Long): String {
-    val totalSeconds = ms / 1000
-    val hours = totalSeconds / 3600
-    val minutes = (totalSeconds % 3600) / 60
-    val seconds = totalSeconds % 60
-    return if (hours > 0) {
-        "%d:%02d:%02d".format(hours, minutes, seconds)
-    } else {
-        "%02d:%02d".format(minutes, seconds)
     }
 }

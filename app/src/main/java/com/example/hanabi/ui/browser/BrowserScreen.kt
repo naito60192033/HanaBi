@@ -30,7 +30,7 @@ import androidx.tv.material3.*
 import coil.compose.AsyncImage
 import android.view.KeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
-import com.example.hanabi.MainActivity
+import com.example.hanabi.ui.ActivityKeyHandler
 import com.example.hanabi.data.smb.SmbEntry
 import com.example.hanabi.viewmodel.BrowserUiState
 import com.example.hanabi.viewmodel.BrowserViewModel
@@ -97,14 +97,11 @@ fun BrowserScreen(
     }
 
     // メニューボタンで設定画面へ遷移
-    DisposableEffect(Unit) {
-        MainActivity.menuKeyHandler = { event ->
-            if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_MENU) {
-                onNavigateToSettings()
-                true
-            } else false
-        }
-        onDispose { MainActivity.menuKeyHandler = null }
+    ActivityKeyHandler { event ->
+        if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_MENU) {
+            onNavigateToSettings()
+            true
+        } else false
     }
 
     // Androidのバックキーでフォルダ階層を上に戻る
